@@ -1,0 +1,3081 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Simulador de Campo Elétrico</title>
+<style>
+  :root{
+    --panel-bg:#f4f4f6;
+    --accent:#6c5ce7;
+    --accent-dark:#5a4bd0;
+    --text:#1c1c22;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0;height:100%;
+    background:#000;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    color:var(--text);
+  }
+  .app{
+    display:flex;
+    height:100vh;
+    width:100vw;
+    overflow:hidden;
+  }
+  .stage{
+    position:relative;
+    flex:1 1 auto;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:#000;
+    min-width:0;
+    padding:10px;
+    overflow:hidden;
+  }
+  canvas{
+    background:#000;
+    border:1px solid #555;
+    cursor:default;
+    object-fit:contain;
+  }
+  canvas.view-fit{
+    max-width:100%;
+    max-height:100%;
+  }
+  canvas.view-crop{
+    max-width:none;
+    max-height:none;
+    flex:0 0 auto;
+  }
+  .panel{
+    flex:0 0 320px;
+    background:var(--panel-bg);
+    padding:18px 20px;
+    overflow-y:auto;
+    border-left:1px solid #ddd;
+  }
+  .row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    margin-bottom:14px;
+  }
+  .check{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:14px;
+    cursor:pointer;
+    user-select:none;
+  }
+  .check input{
+    width:18px;height:18px;
+    accent-color:var(--accent);
+    cursor:pointer;
+  }
+  button{
+    background:var(--accent);
+    color:#fff;
+    border:none;
+    border-radius:6px;
+    padding:8px 14px;
+    font-size:13px;
+    cursor:pointer;
+    transition:background .15s;
+  }
+  button:hover{ background:var(--accent-dark); }
+  button.secondary{
+    background:#888;
+  }
+  button.secondary:hover{ background:#666; }
+  .field{
+    margin-bottom:16px;
+  }
+  .field label{
+    display:block;
+    font-size:12.5px;
+    margin-bottom:4px;
+    color:#333;
+  }
+  .field label .val{
+    font-weight:600;
+    color:var(--accent-dark);
+  }
+  input[type=range]{
+    width:100%;
+    accent-color:var(--accent);
+  }
+  .charges-wrap{
+    margin-bottom:10px;
+    padding:10px 12px;
+    background:#fff;
+    border-radius:8px;
+    border:1px solid #e2e2e6;
+    max-height:180px;
+    overflow-y:auto;
+  }
+  .charges-wrap .field{
+    margin-bottom:8px;
+  }
+  .charges-wrap .field:last-child{ margin-bottom:0; }
+  .charge-row.inactive{
+    display:none;
+  }
+  h2{
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    color:#888;
+    margin:22px 0 10px;
+  }
+  h2:first-of-type{ margin-top:0; }
+  .btn-row{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+  .sub-row{ display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-top:6px; }
+  .sub-row label{ font-size:12.5px; display:flex; align-items:center; gap:6px; }
+  .sub-row select{ padding:4px 6px; border-radius:4px; border:1px solid #ccc; }
+  .meter-label{
+    font-size:12px;
+    background:rgba(255,255,200,0.9);
+    padding:2px 8px;
+    border-radius:12px;
+    border:1px solid #ccaa00;
+    pointer-events:none;
+    white-space:pre;
+  }
+  .delete-meter{
+    position:absolute;
+    top:-18px;
+    right:-18px;
+    background:#c0392b;
+    color:#fff;
+    border:none;
+    border-radius:50%;
+    width:20px;
+    height:20px;
+    font-size:12px;
+    line-height:20px;
+    text-align:center;
+    cursor:pointer;
+    padding:0;
+    pointer-events:auto;
+  }
+  .view-controls{
+    display:flex;
+    gap:8px;
+    margin-bottom:10px;
+  }
+  .view-controls button{
+    flex:1;
+    font-size:11px;
+    padding:6px 8px;
+  }
+  .view-controls button.active{
+    background:var(--accent-dark);
+    box-shadow:inset 0 0 0 2px #fff;
+  }
+
+  .collapsible-section {
+    margin-bottom: 16px;
+    border: 1px solid #e2e2e6;
+    border-radius: 8px;
+    background: #fff;
+    overflow: hidden;
+  }
+
+  .collapsible-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.2s;
+    background: #fafafa;
+  }
+
+  .collapsible-header:hover {
+    background: #f0f0f0;
+  }
+
+  .collapsible-header h2 {
+    margin: 0;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: #888;
+  }
+
+  .collapsible-toggle {
+    font-size: 16px;
+    transition: transform 0.3s ease;
+    display: inline-block;
+    color: #888;
+  }
+
+  .collapsible-toggle.open {
+    transform: rotate(180deg);
+  }
+
+  .collapsible-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+    padding: 0 14px;
+  }
+
+  .collapsible-content.open {
+    max-height: 2000px;
+    padding: 14px;
+  }
+
+  .collapsible-content .field:last-child {
+    margin-bottom: 0;
+  }
+
+  .line-plot-panel{
+    flex:0 0 auto;
+    width:0;
+    overflow:hidden;
+    background:#111217;
+    border-right:1px solid #333;
+    transition:width .25s ease;
+  }
+  .line-plot-panel.dragging{
+    transition:none;
+  }
+  .line-plot-inner{
+    width:100%;
+    min-width:260px;
+    height:100%;
+    box-sizing:border-box;
+    padding:16px;
+    display:flex;
+    flex-direction:column;
+    color:#e8e8ec;
+  }
+  .line-plot-resizer{
+    flex:0 0 0px;
+    width:0;
+    cursor:col-resize;
+    background:#2a2a30;
+    overflow:hidden;
+    transition:width .25s ease, flex-basis .25s ease;
+  }
+  .line-plot-resizer.visible{
+    flex:0 0 6px;
+    width:6px;
+  }
+  .line-plot-resizer.visible:hover,
+  .line-plot-resizer.visible.active{
+    background:var(--accent);
+  }
+  .line-plot-panel h3{
+    margin:0 0 12px;
+    font-size:14px;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    color:#bbb;
+    flex:0 0 auto;
+  }
+  .line-plot-controls{
+    margin-bottom:12px;
+    flex:0 0 auto;
+  }
+  .line-plot-controls .check{
+    color:#e8e8ec;
+    font-size:13px;
+    margin-bottom:8px;
+  }
+  .line-plot-controls .check input{
+    accent-color:var(--accent);
+  }
+  .line-plot-controls .sub-row{
+    margin-top:6px;
+  }
+  .line-plot-controls .sub-row label{
+    color:#bbb;
+    font-size:12.5px;
+  }
+  .line-plot-controls select{
+    padding:4px 6px;
+    border-radius:4px;
+    border:1px solid #444;
+    background:#1c1d24;
+    color:#e8e8ec;
+  }
+  #linePlotChart{
+    width:100%;
+    flex:1 1 auto;
+    min-height:180px;
+    background:#0b0b0d;
+    border:1px solid #2c2c33;
+    border-radius:6px;
+  }
+  .line-plot-readout{
+    margin-top:10px;
+    font-size:12px;
+    color:#ccc;
+    line-height:1.6;
+    flex:0 0 auto;
+  }
+  .line-plot-readout b{ color:#fff; }
+  .line-plot-hint{
+    margin-top:10px;
+    font-size:11.5px;
+    color:#777;
+    line-height:1.5;
+    flex:0 0 auto;
+  }
+  #btnLinePlot.active{
+    background:var(--accent-dark);
+    box-shadow:inset 0 0 0 2px #fff;
+  }
+
+  .line-plot-fix-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+  }
+  .line-plot-fix-row .check {
+    color: #e8e8ec;
+    font-size: 12.5px;
+    margin-bottom: 0;
+  }
+
+  .watermark {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid #ddd;
+    font-size: 12px;
+    color: #999;
+    text-align: center;
+    line-height: 1.6;
+  }
+  .watermark a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .watermark a:hover {
+    text-decoration: underline;
+  }
+
+  .meter-si-controls {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 6px;
+  }
+  .meter-si-controls label {
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .meter-si-controls input {
+    width: 55px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    font-size: 12px;
+  }
+  .meter-si-controls .pow-input {
+    width: 30px;
+  }
+  .meter-si-controls sup {
+    font-size: 10px;
+    margin-left: -2px;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="line-plot-panel" id="linePlotPanel">
+    <div class="line-plot-inner">
+      <h3>Plotar em linha</h3>
+      <div class="line-plot-controls">
+        <div class="btn-row" style="margin-bottom:12px;">
+          <button id="btnAlignX" style="flex:1;">Alinhar linha ao eixo X</button>
+          <button id="btnAlignY" style="flex:1;">Alinhar linha ao eixo Y</button>
+        </div>
+        <label class="check"><input type="checkbox" id="chkLinePlotE" checked> Campo Elétrico (E)</label>
+        <label class="check"><input type="checkbox" id="chkLinePlotV"> Potencial (V)</label>
+        <div class="sub-row">
+          <label>Escala:</label>
+          <select id="linePlotScaleSelect">
+            <option value="linear">Linear</option>
+            <option value="log">Log (sgn·log(1+|x|))</option>
+          </select>
+        </div>
+
+        <label class="check" style="margin-top:8px;"><input type="checkbox" id="chkLinePlotRef"> Função de referência</label>
+        <div id="lpRefControls" style="display:none;">
+          <div class="sub-row">
+            <label>Tipo:
+              <select id="lpRefTypeSelect">
+                <option value="r">|r|</option>
+                <option value="x">|x|</option>
+                <option value="y">|y|</option>
+                <option value="s">|s|</option>
+              </select>
+            </label>
+            <label>Potência:
+              <input type="number" id="lpRefPowerInput" min="-6" max="6" step="1" value="-2" style="width:52px;">
+            </label>
+          </div>
+          <div class="field">
+            <label>Constante = <span class="val" id="lblLpRefConst">1</span></label>
+            <input type="range" id="sldLpRefConst" min="-10" max="10" step="0.05" value="1">
+          </div>
+          <div class="sub-row">
+            <label>Limitar por:
+              <select id="lpRefNormalizeSelect">
+                <option value="constante">Constante</option>
+                <option value="E">|E|</option>
+                <option value="V">|V|</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div class="line-plot-fix-row">
+          <label class="check"><input type="checkbox" id="chkFixX"> Fixar X</label>
+          <label class="check"><input type="checkbox" id="chkFixY"> Fixar Y</label>
+          <label class="check"><input type="checkbox" id="chkMoveBoth"> Mover ambos</label>
+        </div>
+      </div>
+      <canvas id="linePlotChart" width="340" height="480"></canvas>
+      <div class="line-plot-readout" id="linePlotReadout"></div>
+      <div class="line-plot-hint">Arraste os pontos <b style="color:#8fb8e0;">A</b> e <b style="color:#e0b28f;">B</b> para definir a linha, e o ponto verde para amostrar um valor ao longo dela.</div>
+    </div>
+  </div>
+
+  <div class="line-plot-resizer" id="linePlotResizer"></div>
+
+  <div class="stage">
+    <canvas id="cv" width="800" height="800"></canvas>
+  </div>
+
+  <div class="panel">
+    
+    <!-- Seção: Exibição -->
+    <div class="collapsible-section">
+      <div class="collapsible-header" onclick="toggleSection(this)">
+        <h2>Exibição</h2>
+        <span class="collapsible-toggle open">▼</span>
+      </div>
+      <div class="collapsible-content open">
+        <div class="row">
+          <label class="check"><input type="checkbox" id="chkAxes"checked>Eixos</label>
+          <label class="check"><input type="checkbox" id="chkHideCharges">Esconder cargas</label>
+        </div>
+        <div class="view-controls">
+          <button id="btnViewFit" class="active">Redimensionar</button>
+          <button id="btnViewCrop">Cortar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Seção: Ações -->
+    <div class="collapsible-section">
+      <div class="collapsible-header" onclick="toggleSection(this)">
+        <h2>Ações</h2>
+        <span class="collapsible-toggle open">▼</span>
+      </div>
+      <div class="collapsible-content open">
+        <div class="row">
+          <button id="btnUndo" style="flex:1;">↩ Undo</button>
+          <button id="btnRedo" style="flex:1;">↪ Redo</button>
+        </div>
+        <div class="row">
+          <button id="btnReset" style="flex:1;">Restaurar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Seção: Configurações de carga -->
+    <div class="collapsible-section">
+      <div class="collapsible-header" onclick="toggleSection(this)">
+        <h2>Configurações de carga</h2>
+        <span class="collapsible-toggle open">▼</span>
+      </div>
+      <div class="collapsible-content open">
+        <div class="btn-row">
+          <button id="btnMonopolo+">Monopolo+</button>
+          <button id="btnMonopolo-">Monopolo-</button>
+        </div>
+        <div class="btn-row">
+          <button id="btnDipolo">Dipolo</button>
+          <button id="btnQuadrupolo">Quadrupolo</button>
+        </div>
+        <div class="btn-row">
+          <button id="btnCapacitor">Capacitor</button>
+          <button id="btnConfinamento">Átomo</button>
+        </div>
+        <div class="btn-row">
+          <button id="btnLinha">Linha</button>
+          <button id="btnGaiola">Gaiola</button>
+        </div>
+        <div class="field">
+          <label>Distância = <span class="val" id="lblD">1.72</span></label>
+          <input type="range" id="sldD" min="0.1" max="3" step="0.01" value="1.72">
+        </div>
+      </div>
+    </div>
+
+    <!-- Seção: Cargas -->
+    <div class="collapsible-section">
+      <div class="collapsible-header" onclick="toggleSection(this)">
+        <h2>Cargas</h2>
+        <span class="collapsible-toggle open">▼</span>
+      </div>
+      <div class="collapsible-content open">
+        <div class="field">
+          <label>Nº cargas = <span class="val" id="lblN">1</span></label>
+          <input type="range" id="sldN" min="1" max="50" step="1" value="1">
+        </div>
+        <div class="row" style="justify-content:flex-start;gap:16px;margin-top:4px;">
+          <label class="check"><input type="checkbox" id="chkShowOnlyActive" checked> Mostrar apenas ativas</label>
+        </div>
+        <div class="charges-wrap" id="chargesWrap"></div>
+      </div>
+    </div>
+
+    <!-- Seção: Equipotenciais -->
+    <div class="collapsible-section">
+      <div class="collapsible-header" onclick="toggleSection(this)">
+        <h2>Equipotenciais</h2>
+        <span class="collapsible-toggle open">▼</span>
+      </div>
+      <div class="collapsible-content open">
+        <label class="check"><input type="checkbox" id="chkEqui" checked> Equipotenciais</label>
+        <div class="field">
+          <label>Nº linhas equipot. = <span class="val" id="lblLines">6</span></label>
+          <input type="range" id="sldLines" min="2" max="50" step="1" value="6">
+        </div>
+        <div class="sub-row">
+          <label>Escala equipotenciais:</label>
+          <select id="equiScaleSelect">
+            <option value="log">Logarítmica</option>
+            <option value="linear">Linear</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Seção: Cores do potencial -->
+    <div class="collapsible-section">
+      <div class="collapsible-header" onclick="toggleSection(this)">
+        <h2>Cores do potencial</h2>
+        <span class="collapsible-toggle open">▼</span>
+      </div>
+      <div class="collapsible-content open">
+        <div class="sub-row">
+          <label class="check"><input type="checkbox" id="chkColorPotential"> Potencial</label>
+          <label class="check"><input type="checkbox" id="chkColorEqui"> Equipotenciais</label>
+        </div>
+        <div class="sub-row">
+          <select id="cmapEquiSelect">
+            <option value="RdBu">RdBu (azul-vermelho)</option>
+            <option value="coolwarm">Coolwarm</option>
+            <option value="seismic">Seismic</option>
+            <option value="PiYG">PiYG</option>
+            <option value="PRGn">PRGn</option>
+            <option value="BrBG">BrBG</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Seção: Campo e grade -->
+    <div class="collapsible-section">
+      <div class="collapsible-header" onclick="toggleSection(this)">
+        <h2>Campo &amp; grade</h2>
+        <span class="collapsible-toggle open">▼</span>
+      </div>
+      <div class="collapsible-content open">
+        <div class="sub-row">
+          <label class="check"><input type="checkbox" id="chkField" checked> Campo Elétrico</label>
+          <label class="check"><input type="checkbox" id="chkPolarGrid"> Grade polar</label>
+        </div>
+        <div class="field">
+          <label>Compr. vetores = <span class="val" id="lblVec">0.35</span></label>
+          <input type="range" id="sldVec" min="0.05" max="1" step="0.01" value="0.35">
+        </div>
+        <div class="sub-row">
+          <label class="check"><input type="checkbox" id="chkAutoScale" checked> Auto-escala</label>
+          <label class="check"><input type="checkbox" id="chkOnlyDir"> Apenas direção</label>
+        </div>
+        <div class="field" style="margin-top:12px;">
+          <label>nx = <span class="val" id="lblNx">37</span></label>
+          <input type="range" id="sldNx" min="5" max="60" step="1" value="37">
+        </div>
+        <div class="field">
+          <label>ny = <span class="val" id="lblNy">36</span></label>
+          <input type="range" id="sldNy" min="5" max="60" step="1" value="36">
+        </div>
+      </div>
+    </div>
+
+    <!-- Seção: Cores do campo vetorial -->
+    <div class="collapsible-section">
+      <div class="collapsible-header" onclick="toggleSection(this)">
+        <h2>Cores do campo vetorial</h2>
+        <span class="collapsible-toggle open">▼</span>
+      </div>
+      <div class="collapsible-content open">
+        <div class="sub-row">
+          <select id="cmapSelect">
+            <option value="white_fade">Fade</option>
+            <option value="viridis">Viridis</option>
+            <option value="inferno">Inferno</option>
+            <option value="plasma">Plasma</option>
+            <option value="magma">Magma</option>
+            <option value="cividis">Cividis</option>
+          </select>
+          <label class="check"><input type="checkbox" id="chkColorField">Vetores c/ cor uniforme</label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Seção: Linhas de campo -->
+    <div class="collapsible-section">
+      <div class="collapsible-header" onclick="toggleSection(this)">
+        <h2>Linhas de campo</h2>
+        <span class="collapsible-toggle open">▼</span>
+      </div>
+      <div class="collapsible-content open">
+        <div class="sub-row">
+          <label class="check"><input type="checkbox" id="chkFieldLines"> Mostrar linhas de campo</label>
+          <label class="check"><input type="checkbox" id="chkFieldLinesArrows" checked> Setas</label>
+        </div>
+        <div class="field">
+          <label>Nº linhas = <span class="val" id="lblFieldLines">24</span></label>
+          <input type="range" id="sldFieldLines" min="4" max="120" step="2" value="24">
+        </div>
+        <div class="sub-row">
+          <label class="check"><input type="checkbox" id="chkColorFieldLines" checked> Colorir por magnitude</label>
+        </div>
+        <div class="sub-row">
+          <select id="cmapFieldLinesSelect">
+            <option value="white_fade">Fade</option>
+            <option value="inferno">Inferno</option>
+            <option value="viridis">Viridis</option>
+            <option value="plasma">Plasma</option>
+            <option value="magma">Magma</option>
+            <option value="cividis">Cividis</option>
+          </select>
+        </div>
+        <div class="sub-row">
+          <label class="check"><input type="checkbox" id="chkLocalColoring" checked> Colorir localmente (por segmento)</label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Seção: Medidores -->
+    <div class="collapsible-section">
+      <div class="collapsible-header" onclick="toggleSection(this)">
+        <h2>Medidores</h2>
+        <span class="collapsible-toggle open">▼</span>
+      </div>
+      <div class="collapsible-content open">
+        <button id="btnAddMeter" style="width:100%;margin-top:6px;">+ Adicionar medidor</button>
+        
+        <div class="sub-row" style="margin-top:8px;">
+          <label class="check"><input type="checkbox" id="chkUseSI"> Usar SI</label>
+        </div>
+        
+        <div class="meter-si-controls" id="siControls" style="display:none;">
+          <label>q = <input type="text" id="siChargeVal" value="1.602"> × 10<sup><input type="text" id="siChargePow" value="-19" class="pow-input"></sup> C</label>
+          <label style="margin-left:8px;">d = <input type="text" id="siDistVal" value="1"> × 10<sup><input type="text" id="siDistPow" value="-10" class="pow-input"></sup> m</label>
+        </div>
+        
+        <div style="margin-top:8px;font-size:12px;color:#555;" id="meterList"></div>
+        <div class="field">
+          <label>Tamanho do medidor = <span class="val" id="lblMs">1</span></label>
+          <input type="range" id="sldMs" min="0.5" max="2" step="0.1" value="1">
+        </div>
+      </div>
+    </div>
+
+    <!-- Seção: Plotar em linha -->
+    <div class="collapsible-section">
+      <div class="collapsible-header" onclick="toggleSection(this)">
+        <h2>Plotar em linha</h2>
+        <span class="collapsible-toggle open">▼</span>
+      </div>
+      <div class="collapsible-content open">
+        <button id="btnLinePlot" style="width:100%;">Plotar em linha</button>
+      </div>
+    </div>
+
+    <!-- Watermark -->
+    <div class="watermark">
+      <div id="watermarkName">Nome</div>
+      <div><a href="#" id="watermarkEmail">email</a></div>
+      <div><a href="#" id="watermarkRepo">repositório</a></div>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+// =========================================================================
+//  CONSTANTS & DEFAULTS
+// =========================================================================
+const MAX_CHARGES = 50;
+const LOGICAL_SIZE = 1080;
+const dpr = 1;
+const canvas = document.getElementById('cv');
+const ctx = canvas.getContext('2d');
+
+let viewMode = 'fit';
+
+function resizeCanvas() {
+  const stage = canvas.parentElement;
+  canvas.classList.toggle('view-fit', viewMode === 'fit');
+  canvas.classList.toggle('view-crop', viewMode === 'crop');
+  const rect = stage.getBoundingClientRect();
+  const w = Math.max(1, rect.width - 20);
+  const h = Math.max(1, rect.height - 20);
+
+  if (viewMode === 'fit') {
+    const size = Math.min(w, h, LOGICAL_SIZE);
+    canvas.style.width = size + 'px';
+    canvas.style.height = size + 'px';
+  } else {
+    canvas.style.width = LOGICAL_SIZE + 'px';
+    canvas.style.height = LOGICAL_SIZE + 'px';
+  }
+}
+
+canvas.width = LOGICAL_SIZE;
+canvas.height = LOGICAL_SIZE;
+canvas.style.width = LOGICAL_SIZE + 'px';
+canvas.style.height = LOGICAL_SIZE + 'px';
+
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+const VIEW = { xMin:-5, xMax:5, yMin:-5, yMax:5 };
+
+function buildQArray(prefix, fallback){
+  const arr = prefix.slice();
+  while(arr.length < MAX_CHARGES) arr.push(fallback);
+  return arr;
+}
+
+const DEFAULTS = {
+  mode: 'reset',
+  numCharges: 1,
+  q: buildQArray([10], 10),
+  linesCount: 12,
+  vectorScale: 0.6,
+  nx: 25,
+  ny: 25,
+  d: 1.72,
+  showField: false,
+  showEqui: true,
+  equiScale: 'linear',
+  showOnlyActive: true,
+  autoScale: false,
+  onlyDir: true,
+  colorField: false,
+  colormap: 'white_fade',
+  colorEqui: false,
+  cmapEqui: 'coolwarm',
+  polarGrid: false,
+  colorPotential: true,
+  showFieldLines: true,
+  fieldLinesCount: 36,
+  colorFieldLines: true,
+  cmapFieldLines: 'white_fade',
+  fieldLinesArrows: true,
+  localColoring: true,
+  distCharge: 1,
+  meterScale: 1,
+  hideCharges: false,
+  useSI: false,
+  siChargeVal: 1.602,
+  siChargePow: -19,
+  siDistVal: 1,
+  siDistPow: -10
+};
+
+let state = JSON.parse(JSON.stringify(DEFAULTS));
+state.positions = null;
+
+let meters = [];
+
+let linePlot = {
+  enabled: false,
+  initialized: false,
+  pointA: {x:-2.5, y:-2.5},
+  pointB: {x: 2.5, y: 2.5},
+  t: 0.5,
+  showE: true,
+  showV: false,
+  scale: 'linear',
+  refEnabled: false,
+  refType: 'r',
+  refPower: -2,
+  refConst: 1,
+  refNormalize: 'constante',
+  fixX: false,
+  fixY: false,
+  moveBoth: false
+};
+let linePlotWidth = 380;
+
+// =========================================================================
+//  UTILITY
+// =========================================================================
+function worldToScreen(x, y){
+  const sx = (x - VIEW.xMin) / (VIEW.xMax - VIEW.xMin) * LOGICAL_SIZE;
+  const sy = LOGICAL_SIZE - (y - VIEW.yMin) / (VIEW.yMax - VIEW.yMin) * LOGICAL_SIZE;
+  return [sx, sy];
+}
+function screenToWorld(sx, sy){
+  const x = VIEW.xMin + (sx/LOGICAL_SIZE) * (VIEW.xMax - VIEW.xMin);
+  const y = VIEW.yMin + (1 - sy/LOGICAL_SIZE) * (VIEW.yMax - VIEW.yMin);
+  return [x, y];
+}
+function spiralFallback(i){
+  const angle = i * 2.399963229728653;
+  const radius = 0.4 + 0.25*Math.sqrt(i);
+  return {x: radius*Math.cos(angle), y: radius*Math.sin(angle)};
+}
+function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+
+function capacitorPlateCount(N){
+  return Math.max(1, Math.floor(N/2));
+}
+
+function getPositions(){
+  const N = Math.min(state.numCharges, MAX_CHARGES);
+  if(state.mode === 'custom'){
+    return state.positions.slice(0, N).map(p => ({...p}));
+  }
+  const pos = [];
+  if(state.mode === 'reset' || state.mode == 'monopolo'){
+    pos.push({x:0, y:0});
+  } else if(state.mode === 'capacitor'){
+    const k = capacitorPlateCount(N);
+    const Y0 = 1.5;
+    for(let i=0;i<k;i++){
+      const y = (k === 1) ? 0 : (Y0 - i*(2*Y0/(k-1)));
+      pos.push({x:-state.d, y});
+    }
+    for(let i=0;i<k;i++){
+      const y = (k === 1) ? 0 : (Y0 - i*(2*Y0/(k-1)));
+      pos.push({x: state.d, y});
+    }
+  } else if(state.mode === 'confinamento'){
+    pos.push({x:0, y:0});
+    for(let k=1;k<=6;k++){
+      const angle = (2*Math.PI/6) * k;
+      pos.push({x: state.d*Math.cos(angle), y: state.d*Math.sin(angle)});
+    }
+  } else if(state.mode === 'dipolo'){
+    pos.push({x:-state.d/2, y:0});
+    pos.push({x: state.d/2, y:0});
+  } else if(state.mode === 'quadrupolo'){
+    pos.push({x: state.d, y: state.d});
+    pos.push({x:-state.d, y: state.d});
+    pos.push({x:-state.d, y:-state.d});
+    pos.push({x: state.d, y:-state.d});
+  } else if(state.mode === 'linha'){
+    if (N === 1) {
+      pos.push({x: 0, y: 0});
+    } else {
+      const offset = (N-1)/2;
+      const spacing = Math.min(state.d, 4.5 / Math.max(1, (N-1)/2));
+      for(let i=0;i<N;i++) {
+        pos.push({x: (i-offset)*spacing, y: 0});
+      }
+    }
+  } else if(state.mode === 'gaiola'){
+    if (N === 1) {
+      pos.push({x: 0, y: 0});
+    } else if (N === 2) {
+      pos.push({x: -state.d, y: 0});
+      pos.push({x: state.d, y: 0});
+    } else {
+      const radius = Math.min(state.d, 4.0);
+      for(let i=0;i<N;i++){
+        const angle = (2*Math.PI/N) * i;
+        pos.push({x: radius*Math.cos(angle), y: radius*Math.sin(angle)});
+      }
+    }
+  }
+  while(pos.length < N) pos.push(spiralFallback(pos.length));
+  return pos.slice(0, N);
+}
+
+function freezeToCustom(){
+  if(state.mode === 'custom') return;
+  const current = getPositions();
+  const full = [];
+  for(let i=0;i<MAX_CHARGES;i++){
+    full.push(i < current.length ? {...current[i]} : spiralFallback(i));
+  }
+  state.positions = full;
+  state.mode = 'custom';
+}
+
+function fieldAt(x, y, positions){
+  let ex=0, ey=0;
+  for(let i=0;i<positions.length;i++){
+    const dx = x - positions[i].x, dy = y - positions[i].y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const denom = Math.pow(dist + 0.1, 3);
+    const q = state.q[i];
+    ex += q*dx/denom;
+    ey += q*dy/denom;
+  }
+  return [ex, ey];
+}
+
+function potentialAt(x, y, positions){
+  let v = 0;
+  for(let i=0;i<positions.length;i++){
+    const dx = x - positions[i].x, dy = y - positions[i].y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    v += state.q[i] / (0.05 + dist);
+  }
+  return v;
+}
+
+function getCoulombFactor() {
+  if (!state.useSI) return 1;
+  const qVal = parseFloat(document.getElementById('siChargeVal').value) || 1.602;
+  const qPow = parseFloat(document.getElementById('siChargePow').value) || -19;
+  const q_si = qVal * Math.pow(10, qPow);
+  const k = 8.9875e9;
+  return k * q_si;
+}
+
+function getDistanceScale() {
+  if (!state.useSI) return 1;
+  const dVal = parseFloat(document.getElementById('siDistVal').value) || 1;
+  const dPow = parseFloat(document.getElementById('siDistPow').value) || -10;
+  return dVal * Math.pow(10, dPow);
+}
+
+function formatScientific(v, digits) {
+  if (!isFinite(v)) return '∞';
+  if (v === 0) return '0';
+  const sign = v < 0 ? '-' : '';
+  const absV = Math.abs(v);
+  const exp = Math.floor(Math.log10(absV));
+  const mantissa = absV / Math.pow(10, exp);
+  const mantStr = mantissa.toFixed(digits);
+  return `${sign}${mantStr}×10^${exp}`;
+}
+
+function formatValue(v) {
+  if (!state.useSI) {
+    if (Math.abs(v) < 1e-6) return v.toExponential(3);
+    return v.toFixed(3);
+  }
+  if (!isFinite(v)) return '∞';
+  if (v === 0) return '0';
+  return formatScientific(v, 3);
+}
+
+function formatValueShort(v) {
+  if (!state.useSI) {
+    if (Math.abs(v) < 1e-6) return v.toExponential(2);
+    if (Math.abs(v) > 1e6) return v.toExponential(2);
+    return v.toFixed(2);
+  }
+  if (!isFinite(v)) return '∞';
+  if (v === 0) return '0';
+  return formatScientific(v, 2);
+}
+
+// =========================================================================
+//  PLOTAR EM LINHA
+// =========================================================================
+function lpLineLength(){
+  const dx = linePlot.pointB.x - linePlot.pointA.x;
+  const dy = linePlot.pointB.y - linePlot.pointA.y;
+  return Math.hypot(dx, dy);
+}
+function lpLineUnit(){
+  const L = lpLineLength();
+  if(L < 1e-9) return [1, 0];
+  return [(linePlot.pointB.x - linePlot.pointA.x)/L, (linePlot.pointB.y - linePlot.pointA.y)/L];
+}
+function lpPointAt(s){
+  const [ux,uy] = lpLineUnit();
+  return {x: linePlot.pointA.x + ux*s, y: linePlot.pointA.y + uy*s};
+}
+function lpSymlog(v){
+  return Math.sign(v) * Math.log(1 + Math.abs(v));
+}
+function lpApplyScale(v){
+  return linePlot.scale === 'log' ? lpSymlog(v) : v;
+}
+
+function lpCatmullRom(p0,p1,p2,p3,t){
+  const t2 = t*t, t3 = t2*t;
+  return 0.5*((2*p1) + (-p0+p2)*t + (2*p0-5*p1+4*p2-p3)*t2 + (-p0+3*p1-3*p2+p3)*t3);
+}
+function lpSmoothSeries(values, factor){
+  const n = values.length;
+  if(n < 3 || factor <= 1) return values.slice();
+  const out = [];
+  for(let i=0;i<n-1;i++){
+    const p0 = values[Math.max(0,i-1)];
+    const p1 = values[i];
+    const p2 = values[i+1];
+    const p3 = values[Math.min(n-1,i+2)];
+    for(let k=0;k<factor;k++){
+      out.push(lpCatmullRom(p0,p1,p2,p3,k/factor));
+    }
+  }
+  out.push(values[n-1]);
+  return out;
+}
+
+function lpSampleLine(positions){
+  const RAW_SAMPLES = 90;
+  const SMOOTH_FACTOR = 6;
+  const L = lpLineLength();
+  const [ux,uy] = lpLineUnit();
+
+  const rawS = [], rawE = [], rawV = [], rawX = [], rawY = [];
+  for(let i=0;i<RAW_SAMPLES;i++){
+    const s = (i/(RAW_SAMPLES-1)) * L;
+    const p = lpPointAt(s);
+    const [ex,ey] = fieldAt(p.x, p.y, positions);
+    rawS.push(s);
+    rawE.push(ex*ux + ey*uy);
+    rawV.push(potentialAt(p.x, p.y, positions));
+    rawX.push(p.x);
+    rawY.push(p.y);
+  }
+  return {
+    s: lpSmoothSeries(rawS, SMOOTH_FACTOR),
+    E: lpSmoothSeries(rawE, SMOOTH_FACTOR),
+    V: lpSmoothSeries(rawV, SMOOTH_FACTOR),
+    X: lpSmoothSeries(rawX, SMOOTH_FACTOR),
+    Y: lpSmoothSeries(rawY, SMOOTH_FACTOR),
+    L
+  };
+}
+
+// ---- Função de referência (para comparar decaimento de E/V) ----
+const LP_REF_EPS = 0.05;
+function lpRefTypeValue(type, x, y, s){
+  let v;
+  if(type === 'x') v = Math.abs(x);
+  else if(type === 'y') v = Math.abs(y);
+  else if(type === 's') v = Math.abs(s);
+  else v = Math.hypot(x, y); // 'r'
+  return Math.max(v, LP_REF_EPS);
+}
+function lpRefShape(data){
+  const power = linePlot.refPower;
+  const type = linePlot.refType;
+  return data.s.map((s,i) => Math.pow(lpRefTypeValue(type, data.X[i], data.Y[i], s), power));
+}
+function lpRefClosestIndex(data, sTarget){
+  let idx = 0, best = Infinity;
+  for(let i=0;i<data.s.length;i++){
+    const d = Math.abs(data.s[i] - sTarget);
+    if(d < best){ best = d; idx = i; }
+  }
+  return idx;
+}
+function lpComputeReferenceCurve(data){
+  const shape = lpRefShape(data);
+  const c = linePlot.refConst;
+  if(linePlot.refNormalize === 'constante'){
+    return shape.map(v => c*v);
+  }
+  // Usar o valor máximo (em módulo) da curva inteira como referência
+  const dataValues = linePlot.refNormalize === 'E' ? data.E : data.V;
+  let maxAbsData = 0;
+  for (let i = 0; i < dataValues.length; i++) {
+    const absVal = Math.abs(dataValues[i]);
+    if (absVal > maxAbsData) maxAbsData = absVal;
+  }
+  // Encontrar o valor máximo da função de forma (shape) para normalizar
+  let maxAbsShape = 0;
+  for (let i = 0; i < shape.length; i++) {
+    const absVal = Math.abs(shape[i]);
+    if (absVal > maxAbsShape) maxAbsShape = absVal;
+  }
+  const scaleFactor = maxAbsShape > 1e-9 ? (maxAbsData / maxAbsShape) : 0;
+  return shape.map(v => {
+    const val = c*scaleFactor*v;
+    // Limitar: se ultrapassar 5x o valor máximo de referência, retorna NaN (descontinuidade)
+    if (Math.abs(val) > maxAbsData * 5) return NaN;
+    return val;
+  });
+}
+function lpFormatNum(v){
+  if(Math.abs(v - Math.round(v)) < 1e-9) return String(Math.round(v));
+  return v.toFixed(2).replace(/0+$/,'').replace(/\.$/,'');
+}
+function lpRefLabel(){
+  const c = linePlot.refConst;
+  const cStr = (Math.abs(c-1)<1e-9) ? '' : (lpFormatNum(c)+'·');
+  let label = `${cStr}|${linePlot.refType}|^${linePlot.refPower}`;
+  if(linePlot.refNormalize !== 'constante') label += ` (limit. por |${linePlot.refNormalize}|)`;
+  return label;
+}
+
+// colormaps
+const CMAPS = {
+  viridis: [
+    [0.267,0.004,0.329],[0.283,0.141,0.458],[0.254,0.265,0.530],
+    [0.207,0.383,0.546],[0.164,0.494,0.522],[0.160,0.599,0.477],
+    [0.230,0.700,0.407],[0.367,0.785,0.325],[0.552,0.849,0.233],
+    [0.758,0.884,0.147],[0.956,0.889,0.176],[0.993,0.914,0.499]
+  ],
+  inferno: [
+    [0.000,0.000,0.015],[0.129,0.000,0.273],[0.251,0.000,0.444],
+    [0.368,0.000,0.565],[0.485,0.108,0.611],[0.589,0.232,0.611],
+    [0.689,0.359,0.577],[0.786,0.486,0.508],[0.871,0.624,0.409],
+    [0.937,0.771,0.294],[0.974,0.897,0.194],[0.988,0.990,0.612]
+  ],
+  plasma: [
+    [0.050,0.030,0.530],[0.188,0.000,0.613],[0.320,0.000,0.635],
+    [0.450,0.000,0.599],[0.573,0.000,0.509],[0.690,0.148,0.383],
+    [0.793,0.305,0.256],[0.878,0.471,0.157],[0.941,0.652,0.098],
+    [0.977,0.837,0.082],[0.984,0.947,0.247],[0.988,0.990,0.612]
+  ],
+  magma: [
+    [0.000,0.000,0.015],[0.129,0.000,0.273],[0.251,0.000,0.444],
+    [0.368,0.000,0.565],[0.485,0.108,0.611],[0.589,0.232,0.611],
+    [0.689,0.359,0.577],[0.786,0.486,0.508],[0.871,0.624,0.409],
+    [0.937,0.771,0.294],[0.974,0.897,0.194],[0.988,0.990,0.612]
+  ],
+  cividis: [
+    [0.000,0.135,0.304],[0.051,0.179,0.364],[0.126,0.224,0.415],
+    [0.210,0.269,0.450],[0.297,0.314,0.468],[0.383,0.360,0.472],
+    [0.470,0.408,0.462],[0.557,0.459,0.439],[0.643,0.513,0.404],
+    [0.730,0.574,0.354],[0.822,0.644,0.289],[0.924,0.735,0.204]
+  ],
+  white_fade: [
+    [1.0,1.0,1.0,0.0],
+    [1.0,1.0,1.0,0.2],
+    [1.0,1.0,1.0,0.4],
+    [1.0,1.0,1.0,0.6],
+    [1.0,1.0,1.0,0.8],
+    [1.0,1.0,1.0,1.0]
+  ]
+};
+
+const CMAPS_DIVERGING = {
+  RdBu: [
+    [0.019,0.188,0.380],[0.129,0.400,0.675],[0.263,0.576,0.765],
+    [0.572,0.773,0.871],[0.819,0.898,0.941],[0.969,0.969,0.969],
+    [0.992,0.859,0.780],[0.957,0.647,0.510],[0.839,0.376,0.302],
+    [0.698,0.094,0.168],[0.404,0.000,0.122]
+  ],
+  coolwarm: [
+    [0.230,0.299,0.754],[0.364,0.489,0.906],[0.553,0.690,0.996],
+    [0.753,0.830,0.961],[0.912,0.942,0.992],[0.969,0.969,0.969],
+    [0.992,0.916,0.855],[0.957,0.707,0.605],[0.839,0.376,0.302],
+    [0.706,0.016,0.150],[0.706,0.016,0.150]
+  ],
+  seismic: [
+    [0.000,0.000,0.300],[0.000,0.000,0.700],[0.200,0.200,1.000],
+    [0.600,0.600,1.000],[0.850,0.850,1.000],[1.000,1.000,1.000],
+    [1.000,0.850,0.850],[1.000,0.600,0.600],[1.000,0.200,0.200],
+    [0.700,0.000,0.000],[0.300,0.000,0.000]
+  ],
+  PiYG: [
+    [0.502,0.000,0.149],[0.678,0.165,0.439],[0.839,0.376,0.655],
+    [0.922,0.639,0.808],[0.992,0.878,0.941],[0.969,0.969,0.969],
+    [0.902,0.961,0.816],[0.651,0.859,0.627],[0.302,0.651,0.302],
+    [0.102,0.451,0.102],[0.000,0.267,0.000]
+  ],
+  PRGn: [
+    [0.251,0.000,0.294],[0.463,0.165,0.514],[0.604,0.439,0.690],
+    [0.761,0.647,0.820],[0.906,0.839,0.918],[0.969,0.969,0.969],
+    [0.851,0.941,0.827],[0.651,0.859,0.627],[0.353,0.682,0.353],
+    [0.102,0.451,0.102],[0.000,0.267,0.000]
+  ],
+  BrBG: [
+    [0.329,0.188,0.020],[0.549,0.318,0.039],[0.749,0.506,0.176],
+    [0.875,0.686,0.365],[0.957,0.843,0.627],[0.969,0.969,0.969],
+    [0.780,0.918,0.918],[0.510,0.831,0.831],[0.302,0.675,0.698],
+    [0.176,0.506,0.749],[0.020,0.188,0.329]
+  ]
+};
+
+function getColor(val, cmapName, withAlpha){
+  const cmap = CMAPS[cmapName] || CMAPS.viridis;
+  const t = clamp(val, 0, 1);
+  const idx = t * (cmap.length-1);
+  const i0 = Math.floor(idx);
+  const i1 = Math.min(i0+1, cmap.length-1);
+  const f = idx - i0;
+  const c0 = cmap[i0], c1 = cmap[i1];
+  
+  const hasAlpha = c0.length === 4;
+  
+  let r = c0[0] + (c1[0]-c0[0])*f;
+  let g = c0[1] + (c1[1]-c0[1])*f;
+  let b = c0[2] + (c1[2]-c0[2])*f;
+  let a = hasAlpha ? (c0[3] + (c1[3]-c0[3])*f) : 1.0;
+  
+  r = Math.round(clamp(r, 0, 1) * 255);
+  g = Math.round(clamp(g, 0, 1) * 255);
+  b = Math.round(clamp(b, 0, 1) * 255);
+  a = clamp(a, 0, 1);
+  
+  if (withAlpha) {
+    return `rgba(${r},${g},${b},${a})`;
+  }
+  return `rgb(${r},${g},${b})`;
+}
+
+function getDivergingColor(val, cmapName){
+  const cmap = CMAPS_DIVERGING[cmapName] || CMAPS_DIVERGING.RdBu;
+  const t = clamp(val, 0, 1);
+  const idx = t * (cmap.length-1);
+  const i0 = Math.floor(idx);
+  const i1 = Math.min(i0+1, cmap.length-1);
+  const f = idx - i0;
+  const c0 = cmap[i0], c1 = cmap[i1];
+  const r = c0[0] + (c1[0]-c0[0])*f;
+  const g = c0[1] + (c1[1]-c0[1])*f;
+  const b = c0[2] + (c1[2]-c0[2])*f;
+  return `rgb(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)})`;
+}
+
+// =========================================================================
+//  DRAWING
+// =========================================================================
+function drawBackgroundGrid(){
+  ctx.fillStyle = '#3a3a20';
+  const step = 0.25;
+  for(let x=VIEW.xMin; x<=VIEW.xMax+1e-9; x+=step){
+    for(let y=VIEW.yMin; y<=VIEW.yMax+1e-9; y+=step){
+      const [sx,sy] = worldToScreen(x,y);
+      ctx.fillRect(sx-0.6, sy-0.6, 1.2, 1.2);
+    }
+  }
+}
+
+function getPotentialRange(positions){
+  let minPot = Infinity, maxPot = -Infinity;
+  const SAMPLE = 4;
+  for(let py=0; py<LOGICAL_SIZE; py+=SAMPLE){
+    const y = VIEW.yMax - (py/LOGICAL_SIZE) * (VIEW.yMax - VIEW.yMin);
+    for(let px=0; px<LOGICAL_SIZE; px+=SAMPLE){
+      const x = VIEW.xMin + (px/LOGICAL_SIZE) * (VIEW.xMax - VIEW.xMin);
+      const v = potentialAt(x, y, positions);
+      if(v < minPot) minPot = v;
+      if(v > maxPot) maxPot = v;
+    }
+  }
+  if(!Number.isFinite(minPot) || !Number.isFinite(maxPot)){
+    return {min:0, max:0, maxAbs:1};
+  }
+  return {
+    min:minPot,
+    max:maxPot,
+    maxAbs:Math.max(Math.abs(minPot), Math.abs(maxPot), 1e-12)*0.1
+  };
+}
+
+function potentialToColor(v, maxAbs){
+  const t = clamp(0.5 + v/(2*maxAbs), 0, 1);
+  return getPotentialDivergingColor(t);
+}
+
+function getPotentialDivergingColor(t){
+  const stops = [
+    [0.0, [0.000, 0.000, 0.700]],
+    [0.5, [0.000, 0.000, 0.000]],
+    [1.0, [0.800, 0.000, 0.000]]
+  ];
+  t = clamp(t, 0, 1);
+  let i = t <= 0.5 ? 0 : 1;
+  const a=stops[i], b=stops[i+1];
+  const f=(t-a[0])/(b[0]-a[0]);
+  const r=a[1][0]+(b[1][0]-a[1][0])*f;
+  const g=a[1][1]+(b[1][1]-a[1][1])*f;
+  const bl=a[1][2]+(b[1][2]-a[1][2])*f;
+  return `rgb(${Math.round(r*255)},${Math.round(g*255)},${Math.round(bl*255)})`;
+}
+
+function drawPotentialBackground(positions) {
+  const W = LOGICAL_SIZE;
+  const H = LOGICAL_SIZE;
+  const STEP = 3;
+
+  const range = getPotentialRange(positions);
+  if (!range || !isFinite(range.maxAbs) || range.maxAbs <= 0) return;
+
+  const img = ctx.createImageData(W, H);
+  const GW = Math.ceil((W - 1) / STEP) + 1;
+  const GH = Math.ceil((H - 1) / STEP) + 1;
+  const potential = new Float32Array(GW * GH);
+
+  for (let gy = 0; gy < GH; gy++) {
+    const py = Math.min(gy * STEP, H - 1);
+    const y = VIEW.yMax - (py / H) * (VIEW.yMax - VIEW.yMin);
+    const row = gy * GW;
+    for (let gx = 0; gx < GW; gx++) {
+      const px = Math.min(gx * STEP, W - 1);
+      const x = VIEW.xMin + (px / W) * (VIEW.xMax - VIEW.xMin);
+      potential[row + gx] = potentialAt(x, y, positions);
+    }
+  }
+
+  const colorLUT = new Array(256);
+  for (let i = 0; i < 256; i++) {
+    const normalized = i / 255;
+    const color = potentialToColor((normalized * 2 - 1) * range.maxAbs, range.maxAbs);
+    const match = color.match(/\d+/g);
+    if (match && match.length >= 3) {
+      colorLUT[i] = [+match[0], +match[1], +match[2]];
+    } else {
+      colorLUT[i] = [255, 255, 255];
+    }
+  }
+
+  function colorFromPotential(v) {
+    const normalized = clamp(0.5 + v / (2 * range.maxAbs), 0, 1);
+    const index = Math.round(normalized * 255);
+    return colorLUT[index];
+  }
+
+  for (let py = 0; py < H; py++) {
+    const fy = py / STEP;
+    const gy = Math.min(Math.floor(fy), GH - 2);
+    const ty = fy - gy;
+    const row0 = gy * GW;
+    const row1 = (gy + 1) * GW;
+
+    for (let px = 0; px < W; px++) {
+      const fx = px / STEP;
+      const gx = Math.min(Math.floor(fx), GW - 2);
+      const tx = fx - gx;
+
+      const V00 = potential[row0 + gx];
+      const V10 = potential[row0 + gx + 1];
+      const V01 = potential[row1 + gx];
+      const V11 = potential[row1 + gx + 1];
+
+      const V0 = V00 + tx * (V10 - V00);
+      const V1 = V01 + tx * (V11 - V01);
+      const v = V0 + ty * (V1 - V0);
+
+      const color = colorFromPotential(v);
+      const idx = (py * W + px) * 4;
+      img.data[idx] = color[0];
+      img.data[idx + 1] = color[1];
+      img.data[idx + 2] = color[2];
+      img.data[idx + 3] = 255;
+    }
+  }
+
+  ctx.putImageData(img, 0, 0);
+}
+
+function drawAxes(){
+  ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+  ctx.lineWidth = 1;
+  const [ox,] = worldToScreen(0,0);
+  const [,oy] = worldToScreen(0,0);
+  ctx.beginPath(); ctx.moveTo(ox,0); ctx.lineTo(ox,canvas.height); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0,oy); ctx.lineTo(canvas.width,oy); ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.font = '11px sans-serif';
+  for(let v=VIEW.xMin; v<=VIEW.xMax; v++){
+    if(v===0) continue;
+    const [sx,] = worldToScreen(v,0);
+    ctx.fillText(v, sx+2, oy-4);
+  }
+  for(let v=VIEW.yMin; v<=VIEW.yMax; v++){
+    if(v===0) continue;
+    const [,sy] = worldToScreen(0,v);
+    ctx.fillText(v, ox+4, sy-2);
+  }
+}
+
+function drawEquipotentials(positions) {
+  const W = LOGICAL_SIZE;
+  const H = LOGICAL_SIZE;
+
+  const activeQ = state.q.slice(0, positions.length);
+  if (positions.length === 0) return;
+
+  const totalCharge = activeQ.reduce((sum, q) => sum + Math.abs(q), 0);
+  if (totalCharge === 0) return;
+
+  const useLogScale = state.equiScale === 'log';
+  const nLines = Math.max(2, state.linesCount);
+  const useColor = state.colorEqui;
+  const cmapName = state.cmapEqui || 'Coolwarm';
+
+  const GRID_STEP = 1;
+  const halfWidthPx = 0.9;
+  const worldWidth = VIEW.xMax - VIEW.xMin;
+  const worldHeight = VIEW.yMax - VIEW.yMin;
+
+  const img = ctx.getImageData(0, 0, W, H);
+  const GW = Math.ceil((W - 1) / GRID_STEP) + 1;
+  const GH = Math.ceil((H - 1) / GRID_STEP) + 1;
+  const potential = new Float32Array(GW * GH);
+
+  let maxAbsV = 0;
+  const charges = activeQ;
+  const pos = positions;
+  const nCharges = pos.length;
+
+  for (let gy = 0; gy < GH; gy++) {
+    const py = Math.min(gy * GRID_STEP, H - 1);
+    const y = VIEW.yMax - (py / H) * worldHeight;
+    const row = gy * GW;
+    for (let gx = 0; gx < GW; gx++) {
+      const px = Math.min(gx * GRID_STEP, W - 1);
+      const x = VIEW.xMin + (px / W) * worldWidth;
+      let v = 0;
+      for (let i = 0; i < nCharges; i++) {
+        const dx = x - pos[i].x;
+        const dy = y - pos[i].y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        v += charges[i] / (0.05 + dist);
+      }
+      potential[row + gx] = v;
+      const av = Math.abs(v);
+      if (av > maxAbsV) maxAbsV = av;
+    }
+  }
+
+  if (!isFinite(maxAbsV) || maxAbsV <= 0) return;
+
+  const halfLines = Math.max(1, Math.floor(nLines / 2));
+  let spacing;
+  if (useLogScale) {
+    const logMax = Math.log(1 + maxAbsV);
+    spacing = logMax / halfLines;
+  } else {
+    spacing = maxAbsV * 0.2 / halfLines;
+  }
+  if (!isFinite(spacing) || spacing <= 0) return;
+
+  const range = useColor ? getPotentialRange(positions) : null;
+  const rangeMaxAbs = range && isFinite(range.maxAbs) && range.maxAbs > 0 ? range.maxAbs : maxAbsV;
+
+  let colorLUT = null;
+  if (useColor) {
+    colorLUT = new Array(256);
+    for (let i = 0; i < 256; i++) {
+      const c = getDivergingColor(i / 255, cmapName);
+      const match = c.match(/\d+/g);
+      if (match && match.length >= 3) {
+        colorLUT[i] = [+match[0], +match[1], +match[2]];
+      } else {
+        colorLUT[i] = [255, 255, 255];
+      }
+    }
+  }
+
+  let levelGrid;
+  if (useLogScale) {
+    levelGrid = new Float32Array(potential.length);
+    for (let i = 0; i < potential.length; i++) {
+      levelGrid[i] = Math.log(1 + Math.abs(potential[i]));
+    }
+  } else {
+    levelGrid = potential;
+  }
+
+  const gradGrid = new Float32Array(levelGrid.length);
+  for (let gy = 0; gy < GH; gy++) {
+    const row = gy * GW;
+    const gyNext = Math.min(gy + 1, GH - 1);
+    const rowNext = gyNext * GW;
+    for (let gx = 0; gx < GW; gx++) {
+      const gxNext = Math.min(gx + 1, GW - 1);
+      const level = levelGrid[row + gx];
+      const levelX = levelGrid[row + gxNext];
+      const levelY = levelGrid[rowNext + gx];
+      gradGrid[row + gx] = Math.hypot(levelX - level, levelY - level);
+    }
+  }
+
+  const maxGX = GW - 1;
+  const maxGY = GH - 1;
+
+  for (let py = 0; py < H; py++) {
+    const fy = py / GRID_STEP;
+    const gy = Math.min(Math.floor(fy), maxGY - 1);
+    const ty = fy - gy;
+    const row0 = gy * GW;
+    const row1 = (gy + 1) * GW;
+
+    for (let px = 0; px < W; px++) {
+      const fx = px / GRID_STEP;
+      const gx = Math.min(Math.floor(fx), maxGX - 1);
+      const tx = fx - gx;
+
+      const i00 = row0 + gx;
+      const i10 = row0 + gx + 1;
+      const i01 = row1 + gx;
+      const i11 = row1 + gx + 1;
+
+      const a = levelGrid[i00] + tx * (levelGrid[i10] - levelGrid[i00]);
+      const d = levelGrid[i01] + tx * (levelGrid[i11] - levelGrid[i01]);
+      const level = a + ty * (d - a);
+
+      const ga = gradGrid[i00] + tx * (gradGrid[i10] - gradGrid[i00]);
+      const gd = gradGrid[i01] + tx * (gradGrid[i11] - gradGrid[i01]);
+      const gradPerPixel = (ga + ty * (gd - ga)) / GRID_STEP;
+
+      let frac;
+      if (useLogScale) {
+        frac = (level / spacing) % 1;
+      } else {
+        frac = ((level / spacing) % 1 + 1) % 1;
+      }
+      const distLevel = Math.min(frac, 1 - frac) * spacing;
+      const distPixels = distLevel / Math.max(gradPerPixel, 1e-6);
+
+      let t = 1 - distPixels / halfWidthPx;
+      if (t <= 0) continue;
+      if (t > 1) t = 1;
+      t = t * t * (3 - 2 * t);
+
+      const va = potential[i00] + tx * (potential[i10] - potential[i00]);
+      const vb = potential[i01] + tx * (potential[i11] - potential[i01]);
+      const v = va + ty * (vb - va);
+
+      const idx = (py * W + px) * 4;
+      let r, g, b;
+
+      if (useColor) {
+        const normalized = clamp(0.5 + v / (2 * rangeMaxAbs), 0, 1);
+        const colorIndex = Math.round(normalized * 255);
+        const color = colorLUT[colorIndex];
+        r = color[0]; g = color[1]; b = color[2];
+      } else {
+        r = 255; g = 255; b = 255;
+      }
+
+      const ia = 1 - t;
+      img.data[idx] = Math.round(r * t + img.data[idx] * ia);
+      img.data[idx + 1] = Math.round(g * t + img.data[idx + 1] * ia);
+      img.data[idx + 2] = Math.round(b * t + img.data[idx + 2] * ia);
+      img.data[idx + 3] = 255;
+    }
+  }
+
+  ctx.putImageData(img, 0, 0);
+}
+
+function drawArrow(x1,y1,x2,y2, color){
+  ctx.beginPath();
+  ctx.moveTo(x1,y1);
+  ctx.lineTo(x2,y2);
+  ctx.strokeStyle = color || '#6BFF66';
+  ctx.lineWidth = 1.3;
+  ctx.stroke();
+  const angle = Math.atan2(y2-y1, x2-x1);
+  const headLen = 10;
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - headLen*Math.cos(angle-Math.PI/7), y2 - headLen*Math.sin(angle-Math.PI/7));
+  ctx.lineTo(x2 - headLen*Math.cos(angle+Math.PI/7), y2 - headLen*Math.sin(angle+Math.PI/7));
+  ctx.closePath();
+  ctx.fillStyle = color || '#6BFF66';
+  ctx.fill();
+}
+
+function drawField(positions){
+  const nx = state.nx, ny = state.ny;
+  const autoScale = state.autoScale;
+  const onlyDir = state.onlyDir;
+  const colorField = !state.colorField;
+  const cmap = state.colormap;
+  const polarGrid = state.polarGrid;
+  let maxLogMag = 0;
+  const fieldData = [];
+  if (polarGrid) {
+    const nRings = Math.max(3, nx);
+    const nAngles = Math.max(6, ny);
+    const maxR = Math.min(VIEW.xMax, VIEW.yMax) * 1.1;
+    for(let ri = 0; ri < nRings; ri++) {
+      const r = (ri / (nRings - 1 || 1)) * maxR;
+      for(let ai = 0; ai < nAngles - 1; ai++) {
+        const theta = (ai / (nAngles - 1)) * 2 * Math.PI;
+        const x = r * Math.cos(theta);
+        const y = r * Math.sin(theta);
+        const [ex,ey] = fieldAt(x,y,positions);
+        const mag = Math.sqrt(ex*ex+ey*ey);
+        const logMag = Math.log(1+mag);
+        fieldData.push({x,y,ex,ey,mag,logMag});
+        if(logMag > maxLogMag) maxLogMag = logMag;
+      }
+    }
+  } else {
+    for(let j=0;j<ny;j++){
+      const y = VIEW.yMin + (j/(ny-1)) * (VIEW.yMax - VIEW.yMin);
+      for(let k=0;k<nx;k++){
+        const x = VIEW.xMin + (k/(nx-1)) * (VIEW.xMax - VIEW.xMin);
+        const [ex,ey] = fieldAt(x,y,positions);
+        const mag = Math.sqrt(ex*ex+ey*ey);
+        const logMag = Math.log(1+mag);
+        fieldData.push({x,y,ex,ey,mag,logMag});
+        if(logMag > maxLogMag) maxLogMag = logMag;
+      }
+    }
+  }
+  const scaleFactor = autoScale ? 0.5 / Math.max(1, Math.max(nx,ny)/20) : state.vectorScale;
+  for(let d of fieldData){
+    const {x,y,ex,ey,mag,logMag} = d;
+    if(mag < 1e-9) continue;
+    const dirx = ex/mag, diry = ey/mag;
+    let len;
+    if(onlyDir){
+      len = scaleFactor * 0.4;
+    } else {
+      len = scaleFactor * Math.log(1+mag);
+    }
+    const [sx1,sy1] = worldToScreen(x-dirx*len/2,y-diry*len/2);
+    const [sx2,sy2] = worldToScreen(x+dirx*len/2, y+diry*len/2);
+    let color = '#6BFF66';
+    if(colorField){
+      const t = maxLogMag > 0 ? clamp(logMag/maxLogMag, 0, 1) : 0.5;
+      const withAlpha = cmap === 'white_fade';
+      color = getColor(t, cmap, withAlpha);
+    }
+    drawArrow(sx1,sy1,sx2,sy2,color);
+  }
+}
+function fieldUnitAt(x, y, positions, sign){
+  const [ex, ey] = fieldAt(x, y, positions);
+  const mag = Math.hypot(ex, ey);
+  if(mag < 1e-9) return [0, 0, 0];
+  return [sign*ex/mag, sign*ey/mag, mag];
+}
+
+function activeChargeSign(i){
+  const q = state.q[i];
+  if(Math.abs(q) < 1e-9) return 0;
+  return q > 0 ? 1 : -1;
+}
+
+function traceFieldLine(x0, y0, positions, sign, sourceIndex){
+  const pts = [{x:x0, y:y0}];
+  const domainW = VIEW.xMax - VIEW.xMin;
+  const domainH = VIEW.yMax - VIEW.yMin;
+  const step = 0.006 * Math.max(domainW, domainH);
+  const margin = 0.15 * Math.max(domainW, domainH);
+  const stopRadius = 0.12;
+  const maxSteps = 600;
+
+  let x = x0, y = y0;
+  let target = -1;
+
+  for(let i=0; i<maxSteps; i++){
+    for(let j=0; j<positions.length; j++){
+      if(j === sourceIndex) continue;
+      if(activeChargeSign(sourceIndex) === activeChargeSign(j)) continue;
+      if(Math.hypot(x-positions[j].x, y-positions[j].y) < stopRadius){
+        target = j;
+        return {points: pts, target: target};
+      }
+    }
+
+    if(x < VIEW.xMin-margin || x > VIEW.xMax+margin ||
+       y < VIEW.yMin-margin || y > VIEW.yMax+margin) break;
+
+    const [k1x,k1y,mag1] = fieldUnitAt(x, y, positions, sign);
+    if(mag1 < 1e-9) break;
+
+    const [k2x,k2y] = fieldUnitAt(
+      x+step/2*k1x, y+step/2*k1y, positions, sign
+    );
+    const [k3x,k3y] = fieldUnitAt(
+      x+step/2*k2x, y+step/2*k2y, positions, sign
+    );
+    const [k4x,k4y] = fieldUnitAt(
+      x+step*k3x, y+step*k3y, positions, sign
+    );
+
+    x += step/6 * (k1x + 2*k2x + 2*k3x + k4x);
+    y += step/6 * (k1y + 2*k2y + 2*k3y + k4y);
+    pts.push({x, y});
+  }
+
+  return {points: pts, target: target};
+}
+
+function buildFieldLines(positions){
+  const activeQ = state.q.slice(0, positions.length);
+  const totalAbsQ = activeQ.reduce((s,q)=>s+Math.abs(q), 0);
+  if(totalAbsQ < 1e-9) return [];
+
+  const totalCount = Math.max(4, state.fieldLinesCount);
+  const seedRadius = 0.02;
+
+  const candidates = Array.from({length: positions.length}, () => []);
+
+  positions.forEach((p, i) => {
+    const q = activeQ[i];
+    if(Math.abs(q) < 1e-9) return;
+
+    const nLines = Math.max(1, Math.round(totalCount * Math.abs(q) / totalAbsQ));
+    const sign = q > 0 ? 1 : -1;
+
+    for(let k=0; k<nLines; k++){
+      const angle = (2*Math.PI*k)/nLines + i*0.37;
+      const x0 = p.x + seedRadius*Math.cos(angle);
+      const y0 = p.y + seedRadius*Math.sin(angle);
+      const result = traceFieldLine(x0, y0, positions, sign, i);
+
+      if(result.points.length > 1){
+        candidates[i].push(result);
+      }
+    }
+  });
+
+  const priority = Array.from(
+    {length: positions.length},
+    () => new Array(positions.length).fill(false)
+  );
+
+  const lines = [];
+
+  for(let i=0; i<candidates.length; i++){
+    for(const candidate of candidates[i]){
+      const j = candidate.target;
+      if(j < 0 || j === i){
+        lines.push(candidate.points);
+        continue;
+      }
+      if(priority[j][i]) continue;
+      priority[i][j] = true;
+      lines.push(candidate.points);
+    }
+  }
+
+  return lines;
+}
+
+function drawFieldLines(positions){
+  var lines = buildFieldLines(positions);
+  if(lines.length === 0) return;
+
+  var colorMode = state.colorFieldLines;
+  var cmap = state.cmapFieldLines || 'inferno';
+  var showArrows = state.fieldLinesArrows;
+  var localColoring = state.localColoring;
+
+  var maxLogMag = 1;
+  var minLogMag = Infinity;
+  var allLogMags = [];
+  
+  if (colorMode && localColoring) {
+    for (var li = 0; li < lines.length; li++) {
+      var pts = lines[li];
+      for (var i = 0; i < pts.length; i++) {
+        var pt = pts[i];
+        var field = fieldUnitAt(pt.x, pt.y, positions, 1);
+        var mag = field[2];
+        var logMag = Math.log(1 + mag);
+        allLogMags.push(logMag);
+        if (logMag > maxLogMag) maxLogMag = logMag;
+        if (logMag < minLogMag) minLogMag = logMag;
+      }
+    }
+  }
+
+  var range = Math.max(1e-9, maxLogMag - minLogMag);
+  ctx.lineWidth = 1.4;
+  
+  for (var li2 = 0; li2 < lines.length; li2++) {
+    var pts2 = lines[li2];
+    
+    if (pts2.length < 2) continue;
+    
+    if (colorMode && localColoring) {
+      for (var i2 = 0; i2 < pts2.length - 1; i2++) {
+        var p1 = pts2[i2];
+        var p2 = pts2[i2 + 1];
+        var coords1 = worldToScreen(p1.x, p1.y);
+        var coords2 = worldToScreen(p2.x, p2.y);
+        
+        var midX = (p1.x + p2.x) / 2;
+        var midY = (p1.y + p2.y) / 2;
+        var fieldMid = fieldUnitAt(midX, midY, positions, 1);
+        var magMid = fieldMid[2];
+        var logMagMid = Math.log(1 + magMid);
+        var t = clamp((logMagMid - minLogMag) / range, 0, 1);
+        
+        var withAlpha = cmap === 'white_fade';
+        var color = getColor(t, cmap, withAlpha);
+        
+        ctx.beginPath();
+        ctx.moveTo(coords1[0], coords1[1]);
+        ctx.lineTo(coords2[0], coords2[1]);
+        ctx.strokeStyle = color;
+        ctx.stroke();
+      }
+      
+      if (showArrows && pts2.length > 6) {
+        var midIdx = Math.floor(pts2.length / 2);
+        var pMid = pts2[midIdx];
+        var fieldMid2 = fieldAt(pMid.x, pMid.y, positions);
+        var ex = fieldMid2[0], ey = fieldMid2[1];
+        var magMid2 = Math.sqrt(ex * ex + ey * ey);
+        
+        if (magMid2 > 1e-9) {
+          var dirx = ex / magMid2;
+          var diry = ey / magMid2;
+          var coords1_arrow = worldToScreen(pMid.x - dirx * 0.001, pMid.y - diry * 0.001);
+          var coords2_arrow = worldToScreen(pMid.x + dirx * 0.12, pMid.y + diry * 0.12);
+          
+          var logMagArrow = Math.log(1 + magMid2);
+          var tArrow = clamp((logMagArrow - minLogMag) / range, 0, 1);
+          var withAlphaArrow = cmap === 'white_fade';
+          var arrowColor = getColor(tArrow, cmap, withAlphaArrow);
+          
+          drawArrow(coords1_arrow[0], coords1_arrow[1], coords2_arrow[0], coords2_arrow[1], arrowColor);
+        }
+      }
+    } else {
+      var strokeColor;
+      if (colorMode) {
+        var sum = 0;
+        for (var i3 = 0; i3 < pts2.length; i3++) {
+          var pt3 = pts2[i3];
+          var field3 = fieldUnitAt(pt3.x, pt3.y, positions, 1);
+          var mag3 = field3[2];
+          sum += Math.log(1 + mag3);
+        }
+        var avg = sum / pts2.length;
+        var t2 = clamp((avg - minLogMag) / range, 0, 1);
+        var withAlpha2 = cmap === 'white_fade';
+        strokeColor = getColor(t2, cmap, withAlpha2);
+      } else {
+        strokeColor = 'rgba(255,255,100,1)';
+      }
+      
+      ctx.beginPath();
+      for (var i4 = 0; i4 < pts2.length; i4++) {
+        var coords = worldToScreen(pts2[i4].x, pts2[i4].y);
+        if (i4 === 0) {
+          ctx.moveTo(coords[0], coords[1]);
+        } else {
+          ctx.lineTo(coords[0], coords[1]);
+        }
+      }
+      ctx.strokeStyle = strokeColor;
+      ctx.stroke();
+
+      if (showArrows && pts2.length > 6) {
+        var midIdx2 = Math.floor(pts2.length / 2);
+        var pMid2 = pts2[midIdx2];
+        var fieldMid3 = fieldAt(pMid2.x, pMid2.y, positions);
+        var ex2 = fieldMid3[0], ey2 = fieldMid3[1];
+        var magMid3 = Math.sqrt(ex2 * ex2 + ey2 * ey2);
+        
+        if (magMid3 > 1e-9) {
+          var dirx2 = ex2 / magMid3;
+          var diry2 = ey2 / magMid3;
+          var coords1_arrow2 = worldToScreen(pMid2.x - dirx2 * 0.001, pMid2.y - diry2 * 0.001);
+          var coords2_arrow2 = worldToScreen(pMid2.x + dirx2 * 0.12, pMid2.y + diry2 * 0.12);
+          drawArrow(coords1_arrow2[0], coords1_arrow2[1], coords2_arrow2[0], coords2_arrow2[1], strokeColor);
+        }
+      }
+    }
+  }
+}
+
+function chargeColor(qn, activeQ){
+  const minQ = Math.min(...activeQ);
+  const maxQ = Math.max(...activeQ);
+  const minAbs = Math.max(Math.abs(minQ), 1e-9);
+  const maxAbs = Math.max(Math.abs(maxQ), 1e-9);
+  let r,g,b;
+  if(qn > 0){
+    r = 1;
+    g = 1 - qn/maxAbs;
+    b = 1 - qn/maxAbs;
+  } else {
+    r = 1 - Math.abs(qn)/minAbs;
+    g = 1;
+    b = 1;
+  }
+  const clamp = v => Math.max(0, Math.min(1, v));
+  r = clamp(r); g = clamp(g); b = clamp(b);
+  return `rgb(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)})`;
+}
+
+function drawCharges(positions){
+  if (state.hideCharges) return;
+  const activeQ = state.q.slice(0, positions.length);
+  positions.forEach((p,i)=>{
+    const [sx,sy] = worldToScreen(p.x,p.y);
+    const color = chargeColor(state.q[i], activeQ);
+    ctx.beginPath();
+    ctx.arc(sx,sy,9,0,2*Math.PI);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = (i===draggingIndex) ? '#ffee00' : '#fff';
+    ctx.lineWidth = (i===draggingIndex) ? 2.5 : 1;
+    ctx.stroke();
+    ctx.fillStyle = '#eeeeee';
+    ctx.font = '12px sans-serif';
+    ctx.fillText('q'+(i+1), sx+10, sy-8);
+  });
+}
+
+function drawMeters(positions){
+  const meterRadius = 24 * state.meterScale;
+  const fontSize = 22 * state.meterScale;
+  const lineHeight = 28 * state.meterScale;
+  const deleteButtonSize = 24 * state.meterScale;
+  const strokeWidth = 1.5;
+  
+  const coulombFactor = getCoulombFactor();
+  const distScale = getDistanceScale();
+  const eFactor = state.useSI ? coulombFactor / (distScale * distScale) : 1;
+  const vFactor = state.useSI ? coulombFactor / distScale : 1;
+  
+  meters.forEach((m, mi) => {
+    const [sx,sy] = worldToScreen(m.x, m.y);
+    ctx.beginPath();
+    ctx.arc(sx,sy,meterRadius,0,2*Math.PI);
+    ctx.fillStyle = '#ffdd00';
+    ctx.fill();
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = strokeWidth;
+    ctx.stroke();
+    
+    let [ex,ey] = fieldAt(m.x, m.y, positions);
+    let v = potentialAt(m.x, m.y, positions);
+    
+    if (state.useSI) {
+      ex *= eFactor;
+      ey *= eFactor;
+      v *= vFactor;
+    }
+    
+    const label = `E = (${formatValueShort(ex)}, ${formatValueShort(ey)})\n|E| = ${formatValueShort(Math.sqrt(ex**2+ey**2))}\nV = ${formatValue(v)}`;
+    
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur = 12 * state.meterScale;
+    ctx.font = `${fontSize}px sans-serif`;
+    
+    const lines = label.split('\n');
+    const maxW = lines.reduce((a,l) => Math.max(a, ctx.measureText(l).width), 0);
+    const pad = 12 * state.meterScale;
+    const x0 = sx + 24 * state.meterScale;
+    const y0 = sy - 16 * state.meterScale - lines.length*lineHeight - pad;
+    
+    ctx.fillStyle = 'rgba(255,255,200,0.9)';
+    ctx.shadowBlur = 0;
+    ctx.fillRect(x0-2, y0-2, maxW + 16*state.meterScale, lines.length*lineHeight + 16*state.meterScale);
+    ctx.strokeStyle = '#ccaa00';
+    ctx.lineWidth = 2 * state.meterScale;
+    ctx.strokeRect(x0-2, y0-2, maxW + 16*state.meterScale, lines.length*lineHeight + 16*state.meterScale);
+    ctx.fillStyle = '#000';
+    ctx.shadowBlur = 0;
+    lines.forEach((line, li) => {
+      ctx.fillText(line, x0 + 4*state.meterScale, y0 + (li+1)*lineHeight);
+    });
+    
+    const bx = x0 + maxW + 20 * state.meterScale;
+    const by = y0 - 4 * state.meterScale;
+    ctx.fillStyle = '#c0392b';
+    ctx.shadowBlur = 0;
+    const halfSize = deleteButtonSize / 2;
+    ctx.fillRect(bx - halfSize, by - halfSize, deleteButtonSize, deleteButtonSize);
+    ctx.fillStyle = '#fff';
+    ctx.font = `${fontSize * 0.9}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🗑', bx, by + 2 * state.meterScale);
+    ctx.textAlign = 'start';
+    ctx.textBaseline = 'alphabetic';
+    
+    m._delX = bx;
+    m._delY = by;
+    m._delSize = deleteButtonSize;
+  });
+}
+
+function drawStar(ctx2, cx, cy, r, color, glow){
+  ctx2.save();
+  ctx2.translate(cx, cy);
+  ctx2.beginPath();
+  const spikes = 4, inner = r*0.38;
+  for(let i=0;i<spikes*2;i++){
+    const ang = (Math.PI/spikes)*i - Math.PI/2;
+    const rad = (i%2===0) ? r : inner;
+    const x = Math.cos(ang)*rad, y = Math.sin(ang)*rad;
+    if(i===0) ctx2.moveTo(x,y); else ctx2.lineTo(x,y);
+  }
+  ctx2.closePath();
+  if(glow){
+    ctx2.shadowColor = color;
+    ctx2.shadowBlur = 10;
+  }
+  ctx2.fillStyle = color;
+  ctx2.fill();
+  ctx2.strokeStyle = 'rgba(0,0,0,0.5)';
+  ctx2.lineWidth = 1;
+  ctx2.stroke();
+  ctx2.restore();
+}
+
+function drawLinePlotOverlay(positions){
+  if(!linePlot.enabled) return;
+  const [sxA,syA] = worldToScreen(linePlot.pointA.x, linePlot.pointA.y);
+  const [sxB,syB] = worldToScreen(linePlot.pointB.x, linePlot.pointB.y);
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(190,190,190,0.55)';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([7,6]);
+  ctx.beginPath();
+  ctx.moveTo(sxA,syA);
+  ctx.lineTo(sxB,syB);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+
+  const L = lpLineLength();
+  const probeWorld = lpPointAt(linePlot.t * L);
+  const [sxP,syP] = worldToScreen(probeWorld.x, probeWorld.y);
+
+  drawStar(ctx, sxA, syA, 13, '#8fb8e0', false);
+  drawStar(ctx, sxB, syB, 13, '#e0b28f', false);
+  drawStar(ctx, sxP, syP, 13, '#a8e600', true);
+
+  ctx.save();
+  ctx.font = 'bold 13px sans-serif';
+  ctx.shadowColor = 'rgba(0,0,0,0.85)';
+  ctx.shadowBlur = 4;
+  ctx.fillStyle = '#8fb8e0';
+  ctx.fillText('A', sxA+12, syA-11);
+  ctx.fillStyle = '#e0b28f';
+  ctx.fillText('B', sxB+12, syB-11);
+  ctx.restore();
+}
+
+// =========================================================================
+//  RENDER
+// =========================================================================
+function render(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  
+  const positions = getPositions();
+  
+  if (state.colorPotential) {
+    drawPotentialBackground(positions);
+  }
+  
+  drawBackgroundGrid();
+  
+  if(state.showEqui) drawEquipotentials(positions);
+  if(state.showFieldLines) drawFieldLines(positions);
+  if(state.showField) drawField(positions);
+  if(state.showAxes) drawAxes();
+  drawCharges(positions);
+  drawMeters(positions);
+  drawLinePlotOverlay(positions);
+
+  document.getElementById('meterList').textContent = meters.length ? `${meters.length} medidor(es)` : '';
+
+  if(linePlot.enabled) drawLinePlotChart(positions);
+}
+
+// =========================================================================
+//  PLOTAR EM LINHA — desenho do gráfico no painel lateral
+// =========================================================================
+const linePlotCanvas = document.getElementById('linePlotChart');
+const lpctx = linePlotCanvas ? linePlotCanvas.getContext('2d') : null;
+
+function resizeLinePlotCanvas(){
+  if(!linePlotCanvas) return;
+  const rect = linePlotCanvas.getBoundingClientRect();
+  const w = Math.max(50, Math.round(rect.width));
+  const h = Math.max(50, Math.round(rect.height));
+  if(w > 0 && linePlotCanvas.width !== w) linePlotCanvas.width = w;
+  if(h > 0 && linePlotCanvas.height !== h) linePlotCanvas.height = h;
+}
+
+function drawLinePlotChart(positions){
+  if(!lpctx) return;
+  resizeLinePlotCanvas();
+  const W = linePlotCanvas.width, H = linePlotCanvas.height;
+  lpctx.clearRect(0,0,W,H);
+  lpctx.fillStyle = '#0b0b0d';
+  lpctx.fillRect(0,0,W,H);
+
+  const showE = linePlot.showE, showV = linePlot.showV, showRef = linePlot.refEnabled;
+  const readout = document.getElementById('linePlotReadout');
+
+  if(!showE && !showV && !showRef){
+    lpctx.fillStyle = '#777';
+    lpctx.font = '13px sans-serif';
+    lpctx.textAlign = 'center';
+    lpctx.fillText('Selecione E e/ou V para plotar', W/2, H/2);
+    lpctx.textAlign = 'start';
+    if(readout) readout.innerHTML = '';
+    return;
+  }
+
+  const data = lpSampleLine(positions);
+  const L = data.L;
+  const Et = data.E.map(lpApplyScale);
+  const Vt = data.V.map(lpApplyScale);
+  const Rt = showRef ? lpComputeReferenceCurve(data).map(lpApplyScale) : null;
+
+  let vals = [0];
+  if(showE) vals = vals.concat(Et);
+  if(showV) vals = vals.concat(Vt);
+  if(showRef) vals = vals.concat(Rt.filter(v => !isNaN(v)));
+  let yMin = Math.min(...vals), yMax = Math.max(...vals);
+  if(yMax - yMin < 1e-6){ yMin -= 1; yMax += 1; }
+  const pad = (yMax - yMin) * 0.1;
+  yMin -= pad; yMax += pad;
+
+  const marginL = 44, marginR = 12, marginT = 14, marginB = 30;
+  const plotW = W - marginL - marginR;
+  const plotH = H - marginT - marginB;
+  const xPix = s => marginL + (L > 1e-9 ? (s/L) : 0) * plotW;
+  const yPix = v => marginT + (1 - (v - yMin)/(yMax - yMin)) * plotH;
+
+  lpctx.strokeStyle = '#2c2c33';
+  lpctx.lineWidth = 1;
+  lpctx.strokeRect(marginL, marginT, plotW, plotH);
+
+  lpctx.strokeStyle = '#3d3d45';
+  lpctx.beginPath();
+  lpctx.moveTo(marginL, yPix(0));
+  lpctx.lineTo(marginL+plotW, yPix(0));
+  lpctx.stroke();
+
+  function drawCurve(seriesT, color){
+    lpctx.beginPath();
+    let started = false;
+    for(let i=0;i<data.s.length;i++){
+      const val = seriesT[i];
+      if (isNaN(val)) {
+        started = false;
+        continue;
+      }
+      const x = xPix(data.s[i]), y = yPix(val);
+      if(!started) {
+        lpctx.moveTo(x,y);
+        started = true;
+      } else {
+        lpctx.lineTo(x,y);
+      }
+    }
+    lpctx.strokeStyle = color;
+    lpctx.lineWidth = 2;
+    lpctx.stroke();
+  }
+  if(showE) drawCurve(Et, '#ff5c5c');
+  if(showV) drawCurve(Vt, '#5cb3ff');
+  if(showRef) drawCurve(Rt, '#ffb454');
+
+  const sProbe = linePlot.t * L;
+  const pxProbe = xPix(sProbe);
+  lpctx.strokeStyle = 'rgba(168,230,0,0.55)';
+  lpctx.setLineDash([4,4]);
+  lpctx.beginPath();
+  lpctx.moveTo(pxProbe, marginT);
+  lpctx.lineTo(pxProbe, marginT+plotH);
+  lpctx.stroke();
+  lpctx.setLineDash([]);
+
+  const probeWorld = lpPointAt(sProbe);
+  const [ux,uy] = lpLineUnit();
+  const [exP,eyP] = fieldAt(probeWorld.x, probeWorld.y, positions);
+  const eParallelProbe = exP*ux + eyP*uy;
+  const vProbe = potentialAt(probeWorld.x, probeWorld.y, positions);
+
+  function drawDot(valueRaw, color){
+    if (isNaN(valueRaw)) return;
+    const y = yPix(lpApplyScale(valueRaw));
+    lpctx.beginPath();
+    lpctx.arc(pxProbe, y, 5, 0, 2*Math.PI);
+    lpctx.fillStyle = color;
+    lpctx.fill();
+    lpctx.strokeStyle = '#fff';
+    lpctx.lineWidth = 1.5;
+    lpctx.stroke();
+  }
+  if(showE) drawDot(eParallelProbe, '#ff5c5c');
+  if(showV) drawDot(vProbe, '#5cb3ff');
+  let refProbeVal = null;
+  if(showRef){
+    const idxProbe = lpRefClosestIndex(data, sProbe);
+    refProbeVal = lpComputeReferenceCurve(data)[idxProbe];
+    if (!isNaN(refProbeVal)) drawDot(refProbeVal, '#ffb454');
+  }
+
+  lpctx.fillStyle = '#999';
+  lpctx.font = '11px sans-serif';
+  lpctx.textAlign = 'left';
+  lpctx.fillText('0', marginL-2, marginT+plotH+16);
+  lpctx.textAlign = 'right';
+  lpctx.fillText(L.toFixed(2), marginL+plotW, marginT+plotH+16);
+  lpctx.textAlign = 'center';
+  lpctx.fillText('r  (posição ao longo da linha, a partir do ponto A)', marginL+plotW/2, H-4);
+
+  lpctx.save();
+  lpctx.translate(12, marginT+plotH/2);
+  lpctx.rotate(-Math.PI/2);
+  lpctx.textAlign = 'center';
+  lpctx.fillText(linePlot.scale==='log' ? 'valor (escala log)' : 'valor', 0, 0);
+  lpctx.restore();
+
+  let ly = marginT+16;
+  lpctx.textAlign = 'left';
+  if(showE){
+    lpctx.fillStyle = '#ff5c5c';
+    lpctx.fillRect(marginL+8, ly-9, 10, 10);
+    lpctx.fillStyle = '#ddd';
+    lpctx.fillText('E paralelo à linha', marginL+22, ly);
+    ly += 15;
+  }
+  if(showV){
+    lpctx.fillStyle = '#5cb3ff';
+    lpctx.fillRect(marginL+8, ly-9, 10, 10);
+    lpctx.fillStyle = '#ddd';
+    lpctx.fillText('V (potencial)', marginL+22, ly);
+    ly += 15;
+  }
+  if(showRef){
+    lpctx.fillStyle = '#ffb454';
+    lpctx.fillRect(marginL+8, ly-9, 10, 10);
+    lpctx.fillStyle = '#ddd';
+    lpctx.fillText(lpRefLabel(), marginL+22, ly);
+  }
+
+  if(readout){
+    let html = `<b>r</b> = ${sProbe.toFixed(3)} / ${L.toFixed(3)}`;
+    if(showE) html += `<br><b>E</b> = ${formatValue(eParallelProbe)}`;
+    if(showV) html += `<br><b>V</b> = ${formatValue(vProbe)}`;
+    if(showRef && refProbeVal !== null && !isNaN(refProbeVal)) 
+      html += `<br><b>Ref</b> (${lpRefLabel()}) = ${formatValue(refProbeVal)}`;
+    readout.innerHTML = html;
+  }
+}
+
+// =========================================================================
+//  DRAG
+// =========================================================================
+let draggingIndex = -1;
+let draggingMeterIndex = -1;
+let draggingLinePoint = null;
+
+function pointerPos(evt){
+  const rect = canvas.getBoundingClientRect();
+  const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+  const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
+  const sx = (clientX-rect.left) * (LOGICAL_SIZE/rect.width);
+  const sy = (clientY-rect.top) * (LOGICAL_SIZE/rect.height);
+  return [sx, sy];
+}
+
+function findChargeAt(sx, sy){
+  const positions = getPositions();
+  let closest = -1, closestDist = Infinity;
+  positions.forEach((p,i)=>{
+    const [px,py] = worldToScreen(p.x,p.y);
+    const dist = Math.hypot(px-sx, py-sy);
+    if(dist < closestDist){ closestDist = dist; closest = i; }
+  });
+  return closestDist < 14 ? closest : -1;
+}
+
+function findMeterAt(sx, sy){
+  for(let i=0;i<meters.length;i++){
+    const [px,py] = worldToScreen(meters[i].x, meters[i].y);
+    const meterRadius = 12 * state.meterScale;
+    const deleteButtonSize = 24 * state.meterScale;
+    
+    if(Math.hypot(px-sx, py-sy) < meterRadius) return i;
+    if(meters[i]._delX !== undefined){
+      if(Math.hypot(meters[i]._delX - sx, meters[i]._delY - sy) < deleteButtonSize/2) return -2-i;
+    }
+  }
+  return -1;
+}
+
+function findLinePointAt(sx, sy){
+  if(!linePlot.enabled) return null;
+  const hitR = 16;
+  const [sxA,syA] = worldToScreen(linePlot.pointA.x, linePlot.pointA.y);
+  const [sxB,syB] = worldToScreen(linePlot.pointB.x, linePlot.pointB.y);
+  const L = lpLineLength();
+  const probeWorld = lpPointAt(linePlot.t * L);
+  const [sxP,syP] = worldToScreen(probeWorld.x, probeWorld.y);
+  if(Math.hypot(sxP-sx, syP-sy) < hitR) return 'probe';
+  if(Math.hypot(sxA-sx, syA-sy) < hitR) return 'A';
+  if(Math.hypot(sxB-sx, syB-sy) < hitR) return 'B';
+  return null;
+}
+
+function handleDown(evt){
+  const [sx,sy] = pointerPos(evt);
+  const deleteButtonSize = 24 * state.meterScale;
+
+  const lp = findLinePointAt(sx,sy);
+  if(lp){
+    draggingLinePoint = lp;
+    canvas.style.cursor = 'grabbing';
+    evt.preventDefault();
+    return;
+  }
+
+  for(let i=0;i<meters.length;i++){
+    if(meters[i]._delX !== undefined){
+      if(Math.hypot(meters[i]._delX - sx, meters[i]._delY - sy) < deleteButtonSize/2){
+        meters.splice(i,1);
+        render();
+        evt.preventDefault();
+        return;
+      }
+    }
+  }
+  const mi = findMeterAt(sx,sy);
+  if(mi >= 0){
+    draggingMeterIndex = mi;
+    canvas.style.cursor = 'grabbing';
+    evt.preventDefault();
+    return;
+  }
+  const idx = findChargeAt(sx,sy);
+  if(idx >= 0){
+    freezeToCustom();
+    draggingIndex = idx;
+    canvas.style.cursor = 'grabbing';
+    evt.preventDefault();
+  }
+}
+
+function handleMove(evt){
+  const [sx,sy] = pointerPos(evt);
+  
+  if (draggingLinePoint) {
+    const [wx,wy] = screenToWorld(sx,sy);
+    const clampedWx = clamp(wx, VIEW.xMin+0.05, VIEW.xMax-0.05);
+    const clampedWy = clamp(wy, VIEW.yMin+0.05, VIEW.yMax-0.05);
+    
+    const fixX = linePlot.fixX;
+    const fixY = linePlot.fixY;
+    const moveBoth = linePlot.moveBoth;
+    
+    if (draggingLinePoint === 'A') {
+      const dx = clampedWx - linePlot.pointA.x;
+      const dy = clampedWy - linePlot.pointA.y;
+      
+      if (!fixX) linePlot.pointA.x = clampedWx;
+      if (!fixY) linePlot.pointA.y = clampedWy;
+      
+      if (moveBoth) {
+        if (!fixX) linePlot.pointB.x += dx;
+        if (!fixY) linePlot.pointB.y += dy;
+        linePlot.pointB.x = clamp(linePlot.pointB.x, VIEW.xMin+0.05, VIEW.xMax-0.05);
+        linePlot.pointB.y = clamp(linePlot.pointB.y, VIEW.yMin+0.05, VIEW.yMax-0.05);
+      }
+    } else if (draggingLinePoint === 'B') {
+      const dx = clampedWx - linePlot.pointB.x;
+      const dy = clampedWy - linePlot.pointB.y;
+      
+      if (!fixX) linePlot.pointB.x = clampedWx;
+      if (!fixY) linePlot.pointB.y = clampedWy;
+      
+      if (moveBoth) {
+        if (!fixX) linePlot.pointA.x += dx;
+        if (!fixY) linePlot.pointA.y += dy;
+        linePlot.pointA.x = clamp(linePlot.pointA.x, VIEW.xMin+0.05, VIEW.xMax-0.05);
+        linePlot.pointA.y = clamp(linePlot.pointA.y, VIEW.yMin+0.05, VIEW.yMax-0.05);
+      }
+    } else if (draggingLinePoint === 'probe') {
+      const [ux,uy] = lpLineUnit();
+      const L = lpLineLength() || 1e-9;
+      let s = (wx - linePlot.pointA.x)*ux + (wy - linePlot.pointA.y)*uy;
+      s = clamp(s, 0, L);
+      linePlot.t = s / L;
+    }
+    render();
+    evt.preventDefault();
+    return;
+  }
+  
+  if(draggingMeterIndex >= 0){
+    const [wx,wy] = screenToWorld(sx,sy);
+    meters[draggingMeterIndex] = {
+      x: clamp(wx, VIEW.xMin + 0.1, VIEW.xMax - 0.1),
+      y: clamp(wy, VIEW.yMin + 0.1, VIEW.yMax - 0.1)
+    };
+    render();
+    evt.preventDefault();
+    return;
+  }
+  if(draggingIndex >= 0){
+    const [wx,wy] = screenToWorld(sx,sy);
+    state.positions[draggingIndex] = {
+      x: clamp(wx, VIEW.xMin + 0.1, VIEW.xMax - 0.1),
+      y: clamp(wy, VIEW.yMin + 0.1, VIEW.yMax - 0.1)
+    };
+    render();
+    evt.preventDefault();
+    return;
+  }
+  const ci = findChargeAt(sx,sy);
+  const mi = findMeterAt(sx,sy);
+  const lp = findLinePointAt(sx,sy);
+  canvas.style.cursor = (ci>=0 || mi>=0 || lp) ? 'grab' : 'default';
+}
+
+function handleUp(){
+  if(draggingIndex >= 0 || draggingMeterIndex >= 0 || draggingLinePoint){
+    if (draggingIndex >= 0 || draggingMeterIndex >= 0) {
+      pushHistory();
+    }
+    draggingIndex = -1;
+    draggingMeterIndex = -1;
+    draggingLinePoint = null;
+    canvas.style.cursor = 'default';
+    render();
+  }
+}
+
+canvas.addEventListener('mousedown', handleDown);
+window.addEventListener('mousemove', handleMove);
+window.addEventListener('mouseup', handleUp);
+canvas.addEventListener('touchstart', handleDown, {passive:false});
+window.addEventListener('touchmove', handleMove, {passive:false});
+window.addEventListener('touchend', handleUp);
+
+// =========================================================================
+//  UI WIRING
+// =========================================================================
+function buildChargeSliders(){
+  const wrap = document.getElementById('chargesWrap');
+  wrap.innerHTML = '';
+  for(let i=0;i<MAX_CHARGES;i++){
+    const div = document.createElement('div');
+    div.className = 'field charge-row' + (i>=state.numCharges ? ' inactive' : '');
+    div.id = 'chargeRow'+i;
+    div.innerHTML = `
+      <label>q<sub>${i+1}</sub> = <span class="val" id="lblQ${i}">${state.q[i]}</span></label>
+      <input type="range" id="sldQ${i}" min="-20" max="20" step="1" value="${state.q[i]}">
+    `;
+    wrap.appendChild(div);
+    
+    const slider = div.querySelector('input');
+    const label = document.getElementById('lblQ'+i);
+    
+    slider.addEventListener('mousedown', () => { sliderChanging = true; });
+    slider.addEventListener('mouseup', () => { 
+      sliderChanging = false; 
+      pushHistory();
+    });
+    slider.addEventListener('touchstart', () => { sliderChanging = true; });
+    slider.addEventListener('touchend', () => { 
+      sliderChanging = false; 
+      pushHistory();
+    });
+    
+    slider.addEventListener('input', e=>{
+      state.q[i] = parseFloat(e.target.value);
+      label.textContent = state.q[i];
+      render();
+    });
+  }
+}
+
+function refreshChargeActiveStates(){
+  const showOnly = state.showOnlyActive;
+  for(let i=0;i<MAX_CHARGES;i++){
+    const row = document.getElementById('chargeRow'+i);
+    if(!row) continue;
+    if(showOnly && i>=state.numCharges){
+      row.classList.add('inactive');
+    } else {
+      row.classList.remove('inactive');
+    }
+  }
+}
+
+function onNumChargesChange(){
+  if (state.numCharges > MAX_CHARGES) {
+    state.numCharges = MAX_CHARGES;
+    document.getElementById('sldN').value = MAX_CHARGES;
+  }
+  
+  refreshChargeActiveStates();
+  
+  if(state.mode === 'capacitor'){
+    const N = state.numCharges;
+    const k = capacitorPlateCount(N);
+    const qArr = [...Array(k).fill(-state.distCharge), ...Array(N-k).fill(state.distCharge)];
+    state.q = buildQArray(qArr, state.distCharge);
+    buildChargeSliders();
+  } else if (state.mode === 'linha' || state.mode === 'gaiola') {
+    const sign = state.q[0] >= 0 ? 1 : -1;
+    const qArr = Array(state.numCharges).fill(sign * state.distCharge);
+    state.q = buildQArray(qArr, sign * state.distCharge);
+    buildChargeSliders();
+  }
+}
+
+function syncControlsFromState(){
+  document.getElementById('chkAxes').checked = state.showAxes;
+  document.getElementById('chkHideCharges').checked = state.hideCharges;
+  document.getElementById('chkField').checked = state.showField;
+  document.getElementById('chkColorEqui').checked = state.colorEqui;
+  document.getElementById('cmapEquiSelect').value = state.cmapEqui || 'RdBu';
+  document.getElementById('chkEqui').checked = state.showEqui;
+  document.getElementById('equiScaleSelect').value = state.equiScale || 'log';
+  document.getElementById('chkShowOnlyActive').checked = state.showOnlyActive;
+  document.getElementById('chkAutoScale').checked = state.autoScale;
+  document.getElementById('chkOnlyDir').checked = state.onlyDir;
+  document.getElementById('chkColorField').checked = state.colorField;
+  document.getElementById('cmapSelect').value = state.colormap;
+  document.getElementById('sldLines').value = state.linesCount;
+  document.getElementById('lblLines').textContent = state.linesCount;
+  document.getElementById('sldN').value = state.numCharges;
+  document.getElementById('lblN').textContent = state.numCharges;
+  document.getElementById('sldVec').value = state.vectorScale;
+  document.getElementById('lblVec').textContent = state.vectorScale;
+  document.getElementById('chkPolarGrid').checked = state.polarGrid;
+  document.getElementById('chkColorPotential').checked = state.colorPotential;
+  document.getElementById('chkFieldLines').checked = state.showFieldLines;
+  document.getElementById('chkFieldLinesArrows').checked = state.fieldLinesArrows;
+  document.getElementById('chkColorFieldLines').checked = state.colorFieldLines;
+  document.getElementById('cmapFieldLinesSelect').value = state.cmapFieldLines;
+  document.getElementById('sldFieldLines').value = state.fieldLinesCount;
+  document.getElementById('lblFieldLines').textContent = state.fieldLinesCount;
+  document.getElementById('sldNx').value = state.nx;
+  document.getElementById('lblNx').textContent = state.nx;
+  document.getElementById('sldNy').value = state.ny;
+  document.getElementById('lblNy').textContent = state.ny;
+  document.getElementById('sldD').value = state.d;
+  document.getElementById('lblD').textContent = state.d;
+  document.getElementById('chkLocalColoring').checked = state.localColoring;
+  document.getElementById('chkUseSI').checked = state.useSI;
+
+  document.getElementById('chkFixX').checked = linePlot.fixX;
+  document.getElementById('chkFixY').checked = linePlot.fixY;
+  document.getElementById('chkMoveBoth').checked = linePlot.moveBoth;
+
+  if (state.useSI) {
+    document.getElementById('siControls').style.display = 'flex';
+  } else {
+    document.getElementById('siControls').style.display = 'none';
+  }
+
+  document.getElementById('siChargeVal').value = state.siChargeVal;
+  document.getElementById('siChargePow').value = state.siChargePow;
+  document.getElementById('siDistVal').value = state.siDistVal;
+  document.getElementById('siDistPow').value = state.siDistPow;
+
+  for(let i=0;i<MAX_CHARGES;i++){
+    const sld = document.getElementById('sldQ'+i);
+    const lbl = document.getElementById('lblQ'+i);
+    if(sld) sld.value = state.q[i];
+    if(lbl) lbl.textContent = state.q[i];
+  }
+  refreshChargeActiveStates();
+}
+
+// =========================================================================
+//  UNDO/REDO SYSTEM
+// =========================================================================
+const MAX_HISTORY = 20;
+let history = [];
+let historyIndex = -1;
+let sliderChanging = false;
+
+function pushHistory() {
+  const snapshot = {
+    mode: state.mode,
+    numCharges: state.numCharges,
+    q: [...state.q],
+    positions: state.positions ? state.positions.map(p => ({...p})) : null,
+    d: state.d,
+    meters: meters.map(m => ({...m})),
+    useSI: state.useSI,
+    siChargeVal: state.siChargeVal,
+    siChargePow: state.siChargePow,
+    siDistVal: state.siDistVal,
+    siDistPow: state.siDistPow
+  };
+  
+  if (historyIndex < history.length - 1) {
+    history = history.slice(0, historyIndex + 1);
+  }
+  
+  history.push(snapshot);
+  if (history.length > MAX_HISTORY) {
+    history.shift();
+  }
+  historyIndex = history.length - 1;
+}
+
+function undo() {
+  if (historyIndex > 0) {
+    historyIndex--;
+    restoreState(history[historyIndex]);
+  }
+}
+
+function redo() {
+  if (historyIndex < history.length - 1) {
+    historyIndex++;
+    restoreState(history[historyIndex]);
+  }
+}
+
+function restoreState(snapshot) {
+  state.mode = snapshot.mode;
+  state.numCharges = snapshot.numCharges;
+  state.q = [...snapshot.q];
+  state.positions = snapshot.positions ? snapshot.positions.map(p => ({...p})) : null;
+  state.d = snapshot.d;
+  state.useSI = snapshot.useSI;
+  state.siChargeVal = snapshot.siChargeVal;
+  state.siChargePow = snapshot.siChargePow;
+  state.siDistVal = snapshot.siDistVal;
+  state.siDistPow = snapshot.siDistPow;
+  meters = snapshot.meters.map(m => ({...m}));
+  
+  document.getElementById('siChargeVal').value = state.siChargeVal;
+  document.getElementById('siChargePow').value = state.siChargePow;
+  document.getElementById('siDistVal').value = state.siDistVal;
+  document.getElementById('siDistPow').value = state.siDistPow;
+  
+  buildChargeSliders();
+  syncControlsFromState();
+  render();
+}
+
+function pushHistoryAndRender() {
+  pushHistory();
+  render();
+}
+
+function applyPreset(mode, numCharges, qArray, dValue) {
+  const limitedNumCharges = Math.min(numCharges, MAX_CHARGES);
+  
+  state.mode = mode;
+  state.numCharges = limitedNumCharges;
+  
+  const sign = qArray.length > 0 && qArray[0] < 0 ? -1 : 1;
+  
+  if (mode === 'linha' || mode === 'gaiola') {
+    for (let i = 0; i < limitedNumCharges; i++) {
+      qArray[i] = sign * state.distCharge;
+    }
+  }
+  
+  const filledQ = [];
+  for (let i = 0; i < limitedNumCharges; i++) {
+    if (i < qArray.length) {
+      filledQ.push(qArray[i]);
+    } else {
+      filledQ.push(sign * state.distCharge);
+    }
+  }
+  
+  while (filledQ.length < MAX_CHARGES) {
+    filledQ.push(sign * state.distCharge);
+  }
+  state.q = filledQ;
+  
+  if (dValue !== undefined) state.d = dValue;
+  buildChargeSliders();
+  syncControlsFromState();
+  pushHistoryAndRender();
+}
+
+// =========================================================================
+//  SLIDER SETUP
+// =========================================================================
+function setupSlider(sliderId, stateKey, formatter, onUpdate, labelId) {
+  const slider = document.getElementById(sliderId);
+  if (!slider) {
+    console.warn('Slider not found:', sliderId);
+    return;
+  }
+  
+  const label = document.getElementById(labelId || ('lbl' + sliderId));
+  
+  slider.addEventListener('mousedown', () => { sliderChanging = true; });
+  slider.addEventListener('mouseup', () => { 
+    sliderChanging = false; 
+    pushHistory();
+  });
+  slider.addEventListener('touchstart', () => { sliderChanging = true; });
+  slider.addEventListener('touchend', () => { 
+    sliderChanging = false; 
+    pushHistory();
+  });
+  
+  slider.addEventListener('input', (e) => {
+    const value = formatter ? formatter(e.target.value) : parseFloat(e.target.value);
+    state[stateKey] = value;
+    if (label) {
+      label.textContent = value;
+    }
+    if (onUpdate) onUpdate(value);
+    render();
+  });
+}
+
+// =========================================================================
+//  COLLAPSIBLE SECTIONS
+// =========================================================================
+function toggleSection(header) {
+  const content = header.nextElementSibling;
+  const toggle = header.querySelector('.collapsible-toggle');
+  
+  content.classList.toggle('open');
+  toggle.classList.toggle('open');
+}
+
+// =========================================================================
+//  EVENT LISTENERS
+// =========================================================================
+document.getElementById('btnUndo').addEventListener('click', undo);
+document.getElementById('btnRedo').addEventListener('click', redo);
+
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+    e.preventDefault();
+    undo();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+    e.preventDefault();
+    redo();
+  }
+});
+
+document.getElementById('btnViewFit').addEventListener('click', function() {
+  viewMode = 'fit';
+  this.classList.add('active');
+  document.getElementById('btnViewCrop').classList.remove('active');
+  resizeCanvas();
+  render();
+});
+
+document.getElementById('btnViewCrop').addEventListener('click', function() {
+  viewMode = 'crop';
+  this.classList.add('active');
+  document.getElementById('btnViewFit').classList.remove('active');
+  resizeCanvas();
+  render();
+});
+
+document.getElementById('chkAxes').addEventListener('change', e=>{ state.showAxes = e.target.checked; render(); });
+document.getElementById('chkHideCharges').addEventListener('change', e=>{ state.hideCharges = e.target.checked; render(); });
+document.getElementById('chkField').addEventListener('change', e=>{ state.showField = e.target.checked; render(); });
+document.getElementById('chkEqui').addEventListener('change', e=>{ state.showEqui = e.target.checked; render(); });
+document.getElementById('cmapEquiSelect').addEventListener('change', e=>{ 
+  state.cmapEqui = e.target.value; 
+  render(); 
+});
+document.getElementById('equiScaleSelect').addEventListener('change', e=>{ 
+  state.equiScale = e.target.value; 
+  render(); 
+});
+
+document.getElementById('chkShowOnlyActive').addEventListener('change', e=>{ state.showOnlyActive = e.target.checked; refreshChargeActiveStates(); render(); });
+document.getElementById('chkAutoScale').addEventListener('change', e=>{ state.autoScale = e.target.checked; render(); });
+document.getElementById('chkOnlyDir').addEventListener('change', e=>{ state.onlyDir = e.target.checked; render(); });
+document.getElementById('chkColorField').addEventListener('change', e=>{ state.colorField = e.target.checked; render(); });
+document.getElementById('cmapSelect').addEventListener('change', e=>{ state.colormap = e.target.value; render(); });
+document.getElementById('chkColorEqui').addEventListener('change', e=>{ state.colorEqui = e.target.checked; render(); });
+document.getElementById('chkPolarGrid').addEventListener('change', e=>{ state.polarGrid = e.target.checked; render(); });
+document.getElementById('chkColorPotential').addEventListener('change', e=>{ state.colorPotential = e.target.checked; render(); });
+document.getElementById('chkFieldLines').addEventListener('change', e=>{ state.showFieldLines = e.target.checked; render(); });
+document.getElementById('chkFieldLinesArrows').addEventListener('change', e=>{ state.fieldLinesArrows = e.target.checked; render(); });
+document.getElementById('chkColorFieldLines').addEventListener('change', e=>{ state.colorFieldLines = e.target.checked; render(); });
+document.getElementById('cmapFieldLinesSelect').addEventListener('change', e=>{ state.cmapFieldLines = e.target.value; render(); });
+document.getElementById('chkLocalColoring').addEventListener('change', e=>{ state.localColoring = e.target.checked; render(); });
+
+// Line plot fix controls
+document.getElementById('chkFixX').addEventListener('change', e=>{ linePlot.fixX = e.target.checked; });
+document.getElementById('chkFixY').addEventListener('change', e=>{ linePlot.fixY = e.target.checked; });
+document.getElementById('chkMoveBoth').addEventListener('change', e=>{ linePlot.moveBoth = e.target.checked; });
+
+setupSlider('sldFieldLines', 'fieldLinesCount', parseInt, null, 'lblFieldLines');
+setupSlider('sldN', 'numCharges', (val) => {
+  const limited = Math.min(parseInt(val), MAX_CHARGES);
+  return limited;
+}, onNumChargesChange, 'lblN');
+setupSlider('sldLines', 'linesCount', parseInt, null, 'lblLines');
+setupSlider('sldVec', 'vectorScale', parseFloat, null, 'lblVec');
+setupSlider('sldNx', 'nx', parseInt, null, 'lblNx');
+setupSlider('sldNy', 'ny', parseInt, null, 'lblNy');
+setupSlider('sldD', 'd', parseFloat, null, 'lblD');
+setupSlider('sldMs', 'meterScale', parseFloat, null, 'lblMs');
+
+// SI controls
+document.getElementById('chkUseSI').addEventListener('change', function(e) {
+  state.useSI = e.target.checked;
+  document.getElementById('siControls').style.display = state.useSI ? 'flex' : 'none';
+  pushHistory();
+  render();
+});
+
+document.getElementById('siChargeVal').addEventListener('change', function(e) {
+  state.siChargeVal = parseFloat(e.target.value) || 1.602;
+  pushHistory();
+  render();
+});
+
+document.getElementById('siChargePow').addEventListener('change', function(e) {
+  state.siChargePow = parseFloat(e.target.value) || -19;
+  pushHistory();
+  render();
+});
+
+document.getElementById('siDistVal').addEventListener('change', function(e) {
+  state.siDistVal = parseFloat(e.target.value) || 1;
+  pushHistory();
+  render();
+});
+
+document.getElementById('siDistPow').addEventListener('change', function(e) {
+  state.siDistPow = parseFloat(e.target.value) || -10;
+  pushHistory();
+  render();
+});
+
+document.getElementById('btnReset').addEventListener('click', ()=>{
+  state = JSON.parse(JSON.stringify(DEFAULTS));
+  meters = [];
+  linePlot.fixX = false;
+  linePlot.fixY = false;
+  linePlot.moveBoth = false;
+  document.getElementById('siChargeVal').value = state.siChargeVal;
+  document.getElementById('siChargePow').value = state.siChargePow;
+  document.getElementById('siDistVal').value = state.siDistVal;
+  document.getElementById('siDistPow').value = state.siDistPow;
+  buildChargeSliders();
+  syncControlsFromState();
+  pushHistoryAndRender();
+});
+
+document.getElementById('btnMonopolo+').addEventListener('click', ()=>{
+  applyPreset('monopolo', 1, [state.distCharge]);
+});
+
+document.getElementById('btnMonopolo-').addEventListener('click', ()=>{
+  applyPreset('monopolo', 1, [-state.distCharge]);
+});
+
+document.getElementById('btnDipolo').addEventListener('click', ()=>{
+  applyPreset('dipolo', 2, [-state.distCharge,state.distCharge]);
+});
+
+document.getElementById('btnQuadrupolo').addEventListener('click', ()=>{
+  applyPreset('quadrupolo', 4, [state.distCharge,-state.distCharge,state.distCharge,-state.distCharge]);
+});
+
+document.getElementById('btnCapacitor').addEventListener('click', ()=>{
+  const N = 20;
+  const k = capacitorPlateCount(N);
+  applyPreset('capacitor', N, [...Array(k).fill(-state.distCharge), ...Array(N-k).fill(state.distCharge)]);
+});
+
+document.getElementById('btnConfinamento').addEventListener('click', ()=>{
+  applyPreset('confinamento', 7, [6 * state.distCharge, ...Array(6).fill(-state.distCharge)], 1.72);
+});
+
+document.getElementById('btnLinha').addEventListener('click', ()=>{
+  const n = state.numCharges;
+  applyPreset('linha', n, Array(n).fill(state.distCharge), 0.35);
+});
+
+document.getElementById('btnGaiola').addEventListener('click', ()=>{
+  const n = state.numCharges;
+  applyPreset('gaiola', n, Array(n).fill(state.distCharge), 1.8);
+});
+
+document.getElementById('btnAddMeter').addEventListener('click', ()=>{
+  meters.push({x:0, y:0});
+  render();
+});
+
+// ---- Plotar em linha ----
+const linePlotPanelEl = document.getElementById('linePlotPanel');
+const linePlotResizerEl = document.getElementById('linePlotResizer');
+
+function setLinePlotOpen(open){
+  linePlot.enabled = open;
+  document.getElementById('btnLinePlot').classList.toggle('active', open);
+  linePlotPanelEl.style.width = open ? linePlotWidth + 'px' : '0px';
+  linePlotResizerEl.classList.toggle('visible', open);
+  resizeCanvas();
+  render();
+}
+
+document.getElementById('btnLinePlot').addEventListener('click', function(){
+  if(!linePlot.initialized){
+    linePlot.initialized = true;
+  }
+  setLinePlotOpen(!linePlot.enabled);
+});
+
+document.getElementById('chkLinePlotE').addEventListener('change', e=>{
+  linePlot.showE = e.target.checked;
+  render();
+});
+document.getElementById('chkLinePlotV').addEventListener('change', e=>{
+  linePlot.showV = e.target.checked;
+  render();
+});
+document.getElementById('linePlotScaleSelect').addEventListener('change', e=>{
+  linePlot.scale = e.target.value;
+  render();
+});
+
+document.getElementById('chkLinePlotRef').addEventListener('change', e=>{
+  linePlot.refEnabled = e.target.checked;
+  document.getElementById('lpRefControls').style.display = linePlot.refEnabled ? '' : 'none';
+  render();
+});
+document.getElementById('lpRefTypeSelect').addEventListener('change', e=>{
+  linePlot.refType = e.target.value;
+  render();
+});
+document.getElementById('lpRefPowerInput').addEventListener('change', e=>{
+  let v = Math.round(parseFloat(e.target.value));
+  if(isNaN(v)) v = -2;
+  v = clamp(v, -6, 6);
+  e.target.value = v;
+  linePlot.refPower = v;
+  render();
+});
+const sldLpRefConst = document.getElementById('sldLpRefConst');
+sldLpRefConst.addEventListener('mousedown', () => { sliderChanging = true; });
+sldLpRefConst.addEventListener('mouseup', () => { sliderChanging = false; pushHistory(); });
+sldLpRefConst.addEventListener('touchstart', () => { sliderChanging = true; });
+sldLpRefConst.addEventListener('touchend', () => { sliderChanging = false; pushHistory(); });
+sldLpRefConst.addEventListener('input', e=>{
+  linePlot.refConst = parseFloat(e.target.value);
+  document.getElementById('lblLpRefConst').textContent = lpFormatNum(linePlot.refConst);
+  render();
+});
+document.getElementById('lpRefNormalizeSelect').addEventListener('change', e=>{
+  linePlot.refNormalize = e.target.value;
+  render();
+});
+
+document.getElementById('btnAlignX').addEventListener('click', ()=>{
+  linePlot.pointA = {x:-4.5, y:0};
+  linePlot.pointB = {x: 4.5, y:0};
+  render();
+});
+document.getElementById('btnAlignY').addEventListener('click', ()=>{
+  linePlot.pointA = {x:0, y:-4.5};
+  linePlot.pointB = {x:0, y: 4.5};
+  render();
+});
+
+// ---- Resizer ----
+let resizingLinePlot = false;
+
+function linePlotMinMaxWidth(){
+  const appRect = document.querySelector('.app').getBoundingClientRect();
+  const controlsWidth = 320;
+  const resizerWidth = 6;
+  const minStage = 260;
+  const maxW = Math.max(220, appRect.width - controlsWidth - resizerWidth - minStage);
+  return {min:220, max:maxW};
+}
+
+function linePlotResizeStart(evt){
+  if(!linePlot.enabled) return;
+  resizingLinePlot = true;
+  linePlotPanelEl.classList.add('dragging');
+  linePlotResizerEl.classList.add('active');
+  document.body.style.cursor = 'col-resize';
+  evt.preventDefault();
+}
+function linePlotResizeMove(evt){
+  if(!resizingLinePlot) return;
+  const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+  const appRect = document.querySelector('.app').getBoundingClientRect();
+  const {min, max} = linePlotMinMaxWidth();
+  let newWidth = clientX - appRect.left;
+  newWidth = clamp(newWidth, min, max);
+  linePlotWidth = newWidth;
+  linePlotPanelEl.style.width = newWidth + 'px';
+  resizeCanvas();
+  render();
+  evt.preventDefault();
+}
+function linePlotResizeEnd(){
+  if(!resizingLinePlot) return;
+  resizingLinePlot = false;
+  linePlotPanelEl.classList.remove('dragging');
+  linePlotResizerEl.classList.remove('active');
+  document.body.style.cursor = '';
+}
+
+linePlotResizerEl.addEventListener('mousedown', linePlotResizeStart);
+window.addEventListener('mousemove', linePlotResizeMove);
+window.addEventListener('mouseup', linePlotResizeEnd);
+linePlotResizerEl.addEventListener('touchstart', linePlotResizeStart, {passive:false});
+window.addEventListener('touchmove', linePlotResizeMove, {passive:false});
+window.addEventListener('touchend', linePlotResizeEnd);
+
+linePlotPanelEl.addEventListener('transitionend', (e)=>{
+  if(e.propertyName === 'width'){
+    resizeCanvas();
+    render();
+  }
+});
+
+window.addEventListener('resize', ()=>{
+  if(linePlot.enabled){
+    const {max} = linePlotMinMaxWidth();
+    if(linePlotWidth > max){
+      linePlotWidth = max;
+      linePlotPanelEl.style.width = linePlotWidth + 'px';
+    }
+  }
+});
+
+// =========================================================================
+//  INIT
+// =========================================================================
+document.getElementById('watermarkName').textContent = 'Por Marcelo Prado Cionek';
+document.getElementById('watermarkEmail').textContent = 'mpcionek@outlook.com';
+document.getElementById('watermarkEmail').href = 'mailto:mpcionek@outlook.com';
+document.getElementById('watermarkRepo').textContent = 'github.com/seu-repo';
+document.getElementById('watermarkRepo').href = 'https://github.com/seu-repo';
+
+buildChargeSliders();
+syncControlsFromState();
+render();
+pushHistory();
+</script>
+</body>
+</html>
