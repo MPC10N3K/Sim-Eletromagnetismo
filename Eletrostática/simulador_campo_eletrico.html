@@ -976,7 +976,7 @@ function formatScientific(v, digits) {
   const exp = Math.floor(Math.log10(absV));
   const mantissa = absV / Math.pow(10, exp);
   const mantStr = mantissa.toFixed(digits);
-  return `${sign}${mantStr}×10^${exp}`;
+  return `${sign}${mantStr}×10<sup>${exp}</sup>`;  
 }
 
 function formatValue(v) {
@@ -1101,27 +1101,26 @@ function lpComputeReferenceCurve(data){
   if(linePlot.refNormalize === 'constante'){
     return shape.map(v => c*v);
   }
-  // Usar o valor máximo (em módulo) da curva inteira como referência
   const dataValues = linePlot.refNormalize === 'E' ? data.E : data.V;
   let maxAbsData = 0;
   for (let i = 0; i < dataValues.length; i++) {
     const absVal = Math.abs(dataValues[i]);
     if (absVal > maxAbsData) maxAbsData = absVal;
   }
-  // Encontrar o valor máximo da função de forma (shape) para normalizar
   let maxAbsShape = 0;
   for (let i = 0; i < shape.length; i++) {
     const absVal = Math.abs(shape[i]);
     if (absVal > maxAbsShape) maxAbsShape = absVal;
   }
   const scaleFactor = maxAbsShape > 1e-9 ? (maxAbsData / maxAbsShape) : 0;
+  
   return shape.map(v => {
-    const val = c*scaleFactor*v;
-    // Limitar: se ultrapassar 5x o valor máximo de referência, retorna NaN (descontinuidade)
-    if (Math.abs(val) > maxAbsData * 5) return NaN;
+    const val = c * scaleFactor * v; 
+    if (Math.abs(val) > maxAbsData * 1.5) return NaN;
     return val;
   });
 }
+
 function lpFormatNum(v){
   if(Math.abs(v - Math.round(v)) < 1e-9) return String(Math.round(v));
   return v.toFixed(2).replace(/0+$/,'').replace(/\.$/,'');
@@ -1971,7 +1970,40 @@ function drawMeters(positions){
       v *= vFactor;
     }
     
-    const label = `E = (${formatValueShort(ex)}, ${formatValueShort(ey)})\n|E| = ${formatValueShort(Math.sqrt(ex**2+ey**2))}\nV = ${formatValue(v)}`;
+    // Função auxiliar para formatar valor com notação científica para exibição no canvas
+    function formatCanvasValue(val) {
+      if (!state.useSI) {
+        if (Math.abs(val) < 1e-6) return val.toExponential(3);
+        return val.toFixed(3);
+      }
+      if (!isFinite(val)) return '∞';
+      if (val === 0) return '0';
+      const sign = val < 0 ? '-' : '';
+      const absV = Math.abs(val);
+      const exp = Math.floor(Math.log10(absV));
+      const mantissa = absV / Math.pow(10, exp);
+      const mantStr = mantissa.toFixed(2);
+      // Retorna como string com notação científica legível no canvas
+      return `${sign}${mantStr}e${exp}`;
+    }
+    
+    function formatCanvasValueShort(val) {
+      if (!state.useSI) {
+        if (Math.abs(val) < 1e-6) return val.toExponential(2);
+        if (Math.abs(val) > 1e6) return val.toExponential(2);
+        return val.toFixed(2);
+      }
+      if (!isFinite(val)) return '∞';
+      if (val === 0) return '0';
+      const sign = val < 0 ? '-' : '';
+      const absV = Math.abs(val);
+      const exp = Math.floor(Math.log10(absV));
+      const mantissa = absV / Math.pow(10, exp);
+      const mantStr = mantissa.toFixed(2);
+      return `${sign}${mantStr}e${exp}`;
+    }
+    
+    const label = `E = (${formatCanvasValueShort(ex)}, ${formatCanvasValueShort(ey)})\n|E| = ${formatCanvasValueShort(Math.sqrt(ex**2+ey**2))}\nV = ${formatCanvasValue(v)}`;
     
     ctx.shadowColor = 'rgba(0,0,0,0.8)';
     ctx.shadowBlur = 12 * state.meterScale;
@@ -3069,8 +3101,8 @@ window.addEventListener('resize', ()=>{
 document.getElementById('watermarkName').textContent = 'Por Marcelo Prado Cionek';
 document.getElementById('watermarkEmail').textContent = 'mpcionek@outlook.com';
 document.getElementById('watermarkEmail').href = 'mailto:mpcionek@outlook.com';
-document.getElementById('watermarkRepo').textContent = 'github.com/seu-repo';
-document.getElementById('watermarkRepo').href = 'https://github.com/seu-repo';
+document.getElementById('watermarkRepo').textContent = 'GitHub';
+document.getElementById('watermarkRepo').href = 'https://github.com/MPC10N3K/Sim-Eletromagnetismo';
 
 buildChargeSliders();
 syncControlsFromState();
