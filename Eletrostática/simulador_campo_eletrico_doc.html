@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Como o simulador de campo elétrico funciona</title>
+<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['\\(','\\)']],
+    displayMath: [['$$','$$']],
+    tags: 'ams'
+  },
+  svg: { fontCache: 'global' }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" async></script>
+<style>
+:root{
+  --bg:#131313; --panel:#171a2a; --card:#353535; --border:#333333;
+  --text:#d8dbef; --muted:#aaaaaa; --accent:#8cd1ff; --accent2:#ff6b6b;
+  --code-bg:#222222; --warn:#ffb454;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  font-size:16px;line-height:1.65}
+a{color:var(--accent2);text-decoration:none}
+a:hover{text-decoration:underline}
+.wrap{max-width:900px;margin:0 auto;padding:48px 24px 96px}
+header.hero{border-bottom:1px solid var(--border);padding-bottom:28px;margin-bottom:36px}
+header.hero h1{margin:0 0 8px;font-size:30px;letter-spacing:-.01em}
+header.hero p{margin:0;color:var(--muted);font-size:15px}
+nav.toc{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:20px 24px;margin-bottom:40px}
+nav.toc h2{margin:0 0 12px;font-size:13px;text-transform:uppercase;
+  letter-spacing:.08em;color:var(--muted)}
+nav.toc ol{margin:0;padding-left:22px}
+nav.toc li{margin:4px 0}
+section{margin:48px 0;scroll-margin-top:20px}
+h2{font-size:24px;margin:0 0 14px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+h3{font-size:18px;margin:28px 0 10px;color:var(--accent)}
+h4{font-size:15px;margin:20px 0 8px;color:var(--accent2)}
+p{margin:10px 0}
+ul,ol{margin:10px 0 10px 24px}
+li{margin:4px 0}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.92em;
+  background:var(--code-bg);border:1px solid var(--border);border-radius:4px;padding:1px 5px}
+pre{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;
+  padding:14px 16px;overflow-x:auto;font-size:13.5px;line-height:1.55}
+pre code{background:none;border:none;padding:0;font-size:inherit}
+.note{background:rgba(107,203,255,.07);border-left:3px solid var(--accent2);
+  padding:10px 14px;border-radius:0 6px 6px 0;margin:14px 0;font-size:14.5px}
+.warn{background:rgba(255,180,84,.07);border-left:3px solid var(--warn);
+  padding:10px 14px;border-radius:0 6px 6px 0;margin:14px 0;font-size:14.5px}
+.math{overflow-x:auto;padding:6px 0}
+mjx-container{color:var(--text) !important}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14.5px}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--border)}
+th{color:var(--muted);font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.05em}
+tr:last-child td{border-bottom:none}
+.step{background:var(--card);border:1px solid var(--border);border-radius:10px;
+  padding:16px 20px;margin:16px 0}
+.step .label{display:inline-block;background:var(--accent);color:#222222;
+  font-weight:700;font-size:12px;padding:2px 9px;border-radius:20px;margin-bottom:8px;
+  letter-spacing:.03em}
+footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--border);
+  color:var(--muted);font-size:13px;text-align:center}
+@media(max-width:700px){.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>Como funciona o simulador de campo elétrico</h1>
+  <p>Documentação conceitual e matemática &mdash; da lei de Coulomb ao traçado de linhas de campo com RK4, passando pelas equipotenciais e pelo perfil unidimensional.</p>
+</header>
+
+<nav class="toc">
+  <h2>Sumário</h2>
+  <ol>
+    <li><a href="#visao">Visão geral</a></li>
+    <li><a href="#coulomb">O campo elétrico: lei de Coulomb</a></li>
+    <li><a href="#regular">Regularização e unidades</a></li>
+    <li><a href="#cargas">Configurações de carga</a></li>
+    <li><a href="#campo">Campo vetorial (setas)</a></li>
+    <li><a href="#linhas">Linhas de campo</a></li>
+    <li><a href="#equi">Equipotenciais</a></li>
+    <li><a href="#potencial">Mapa de potencial</a></li>
+    <li><a href="#medidores">Medidores e unidades SI</a></li>
+    <li><a href="#linha">Perfil unidimensional ("Plotar em linha")</a></li>
+    <li><a href="#arq">Arquitetura do programa</a></li>
+    <li><a href="#limites">Limitações e escolhas numéricas</a></li>
+  </ol>
+</nav>
+
+<!-- ============================================================ -->
+<section id="visao">
+<h2>1. Visão geral</h2>
+
+<p>O simulador resolve numericamente o seguinte problema: dadas \(N\) cargas pontuais \(q_1, \ldots, q_N\) em posições \(\mathbf{r}_1, \ldots, \mathbf{r}_N\) no plano, desenhar o <strong>campo elétrico</strong> \(\mathbf{E}(\mathbf{r})\) e o <strong>potencial</strong> \(V(\mathbf{r})\) que elas produzem.</p>
+
+<p>O programa oferece seis visualizações complementares, cada uma com seu próprio pipeline numérico:</p>
+
+<div class="step">
+  <span class="label">1</span>
+  <strong>Campo vetorial</strong>: setas amostradas numa grade ou em anéis polares, com comprimento proporcional a \(|\mathbf{E}|\) (ou apenas direção).
+</div>
+
+<div class="step">
+  <span class="label">2</span>
+  <strong>Linhas de campo</strong>: curvas integradas por RK4 a partir de sementes em torno das cargas.
+</div>
+
+<div class="step">
+  <span class="label">3</span>
+  <strong>Equipotenciais</strong>: contornos de \(V\) obtidos por marching squares sobre a grade.
+</div>
+
+<div class="step">
+  <span class="label">4</span>
+  <strong>Mapa de potencial</strong>: cada pixel do canvas recebe uma cor divergente de \(V\).
+</div>
+
+<div class="step">
+  <span class="label">5</span>
+  <strong>Medidores</strong>: pontos amostrados que mostram \(\mathbf{E}\), \(|\mathbf{E}|\) e \(V\), eventualmente convertidos para SI.
+</div>
+
+<div class="step">
+  <span class="label">6</span>
+  <strong>Perfil unidimensional</strong>: ao longo de um segmento \(A \to B\), plota \(E_\parallel\) (componente paralela à linha) e \(V\) em função da posição.
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="coulomb">
+<h2>2. O campo elétrico: lei de Coulomb</h2>
+
+<p>A lei de Coulomb dá o campo elétrico produzido por uma carga pontual \(q\) em \(\mathbf{r}'\), num ponto \(\mathbf{r}\):</p>
+
+<div class="math">
+$$\mathbf{E}(\mathbf{r}) = \frac{1}{4\pi\varepsilon_0}\,\frac{q\,(\mathbf{r} - \mathbf{r}')}{\|\mathbf{r} - \mathbf{r}'\|^{3}}$$
+</div>
+
+<p>Para \(N\) cargas, o princípio da superposição dá:</p>
+
+<div class="math">
+$$\mathbf{E}(\mathbf{r}) = \frac{1}{4\pi\varepsilon_0}\sum_{i=1}^{N} \frac{q_i\,(\mathbf{r} - \mathbf{r}_i)}{\|\mathbf{r} - \mathbf{r}_i\|^{3}}$$
+</div>
+
+<p>e o potencial elétrico (energia potencial por unidade de carga) é:</p>
+
+<div class="math">
+$$V(\mathbf{r}) = \frac{1}{4\pi\varepsilon_0}\sum_{i=1}^{N} \frac{q_i}{\|\mathbf{r} - \mathbf{r}_i\|}$$
+</div>
+
+<p>O campo é o gradiente negativo do potencial:</p>
+
+<div class="math">
+$$\mathbf{E}(\mathbf{r}) = -\nabla V(\mathbf{r})$$
+</div>
+
+<div class="note">
+<strong>Por que o campo decai com \(1/r^2\) e o potencial com \(1/r\)?</strong> Porque \(\mathbf{E}\) é proporcional a \(\hat{\mathbf{r}}/r^2\) e \(V\) a \(1/r\). A diferença de expoente vem da integração: \(V = -\int \mathbf{E}\cdot d\boldsymbol{\ell}\), e \(\int r^{-2}\,dr = -r^{-1}\).
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="regular">
+<h2>3. Regularização e unidades</h2>
+
+<h3>3.1 Regularização do denominador</h3>
+
+<p>Nos pontos exatamente sobre uma carga, o campo diverge. O programa evita a divisão por zero adicionando uma constante \(\varepsilon\) ao denominador:</p>
+
+<div class="math">
+$$\mathbf{E}(\mathbf{r}) \approx \sum_{i=1}^{N} \frac{q_i\,(\mathbf{r} - \mathbf{r}_i)}{(\|\mathbf{r} - \mathbf{r}_i\| + \varepsilon_E)^{3}}, \qquad V(\mathbf{r}) \approx \sum_{i=1}^{N} \frac{q_i}{\|\mathbf{r} - \mathbf{r}_i\| + \varepsilon_V}$$
+</div>
+
+<p>O código usa \(\varepsilon_E = 0.1\) e \(\varepsilon_V = 0.05\). Esses valores foram escolhidos para:</p>
+
+<ul>
+  <li>Estabilizar o cálculo numérico perto das cargas.</li>
+  <li>Não distorcer o campo a distâncias maiores que a separação típica entre cargas.</li>
+  <li>Manter as equipotenciais visualmente suaves em torno de cada carga.</li>
+</ul>
+
+<div class="warn">
+<strong>Consequência:</strong> as magnitudes exibidas perto das cargas <em>não</em> são o valor exato de Coulomb. Para comparações quantitativas, use pontos afastados das cargas (mais de ~0,5 unidade).
+</div>
+
+<h3>3.2 Unidades</h3>
+
+<p>O simulador tem dois modos de unidade:</p>
+
+<table>
+  <tr><th>Modo</th><th>Constante efetiva</th><th>Interpretação</th></tr>
+  <tr><td>Arbitrário (padrão)</td><td>\(1/(4\pi\varepsilon_0) = 1\)</td><td>Cargas e distâncias em unidades genéricas.</td></tr>
+  <tr><td>SI</td><td>\(k_e = 8{,}9875\times 10^{9}\)</td><td>Cargas em coulombs, distâncias em metros.</td></tr>
+</table>
+
+<p>No modo SI, os medidores exibem \(\mathbf{E}\) em V/m e \(V\) em volts, aplicando:</p>
+
+<div class="math">
+$$E_{\text{SI}} = \frac{k_e\, q_{\text{SI}}}{d_{\text{SI}}^2}, \qquad V_{\text{SI}} = \frac{k_e\, q_{\text{SI}}}{d_{\text{SI}}}$$
+</div>
+
+<p>onde \(q_{\text{SI}}\) e \(d_{\text{SI}}\) são obtidos das entradas "q = valor × 10^pot" e "d = valor × 10^pot" no painel.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="cargas">
+<h2>4. Configurações de carga</h2>
+
+<p>Cada configuração é um preset que define <strong>posições</strong> e <strong>cargas</strong> iniciais. O usuário pode depois mover cargas individualmente (arrastando) e alterar \(q_i\) pelos sliders.</p>
+
+<table>
+  <tr><th>Preset</th><th>Posições</th><th>Cargas</th></tr>
+  <tr>
+    <td>Monopolo ±</td>
+    <td>1 carga na origem</td>
+    <td>\(+Q\) ou \(-Q\)</td>
+  </tr>
+  <tr>
+    <td>Dipolo</td>
+    <td>2 cargas em \((\pm d/2, 0)\)</td>
+    <td>\(-Q, +Q\)</td>
+  </tr>
+  <tr>
+    <td>Quadrupolo</td>
+    <td>4 cargas nos vértices de um quadrado de lado \(2d\)</td>
+    <td>\(+Q, -Q, +Q, -Q\)</td>
+  </tr>
+  <tr>
+    <td>Capacitor</td>
+    <td>2 placas verticais em \(x = \pm d\), com \(N/2\) cargas cada</td>
+    <td>Placa esquerda \(-Q\), direita \(+Q\)</td>
+  </tr>
+  <tr>
+    <td>Átomo</td>
+    <td>1 carga central + 6 cargas em hexágono de raio \(d\)</td>
+    <td>Núcleo \(+6Q\), elétrons \(-Q\)</td>
+  </tr>
+  <tr>
+    <td>Linha</td>
+    <td>\(N\) cargas ao longo do eixo \(x\), espaçamento \(d\)</td>
+    <td>Todas \(+Q\) (ou todas \(-Q\))</td>
+  </tr>
+  <tr>
+    <td>Gaiola</td>
+    <td>\(N\) cargas em círculo de raio \(d\)</td>
+    <td>Todas \(+Q\) (ou todas \(-Q\))</td>
+  </tr>
+</table>
+
+<h3>Modo personalizado</h3>
+
+<p>Quando o usuário arrasta uma carga, o programa "congela" a configuração atual em <code>state.positions</code> e muda o modo para <code>custom</code>. A partir daí, os presets não reposicionam mais as cargas automaticamente, e cada uma pode ser movida livremente.</p>
+
+<h3>Slider "Nº cargas"</h3>
+
+<p>O número de cargas ativas é controlado por um slider (1 a 50). Cargas inativas ficam ocultas (opção "Mostrar apenas ativas") e não contribuem para o campo. Para os presets <em>linha</em> e <em>gaiola</em>, aumentar \(N\) redistribui as cargas igualmente ao longo da geometria.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="campo">
+<h2>5. Campo vetorial (setas)</h2>
+
+<p>As setas amostram \(\mathbf{E}\) em pontos de uma grade (ou de anéis polares) e desenham um vetor centrado em cada ponto.</p>
+
+<h3>5.1 Amostragem</h3>
+
+<p><strong>Grade retangular</strong> com \(n_x \times n_y\) pontos:</p>
+
+<div class="math">
+$$x_k = x_{\min} + \frac{k}{n_x - 1}(x_{\max} - x_{\min}), \quad k = 0, \ldots, n_x - 1$$
+$$y_j = y_{\min} + \frac{j}{n_y - 1}(y_{\max} - y_{\min}), \quad j = 0, \ldots, n_y - 1$$
+</div>
+
+<p><strong>Grade polar</strong> com \(n_r\) anéis e \(n_\theta\) ângulos:</p>
+
+<div class="math">
+$$r_a = \frac{a}{n_r - 1}\,R_{\max}, \quad \theta_b = \frac{b}{n_\theta - 1}\,2\pi$$
+$$\mathbf{r}_{ab} = (r_a\cos\theta_b,\; r_a\sin\theta_b)$$
+</div>
+
+<p>onde \(R_{\max} = 1.1 \cdot \min(|x_{\max}|, |y_{\max}|)\) &mdash; ligeiramente além da região visível.</p>
+
+<h3>5.2 Comprimento das setas</h3>
+
+<p>Duas opções:</p>
+
+<ul>
+  <li><strong>Apenas direção</strong>: todas as setas têm o mesmo comprimento \(L_{\text{fix}} = 0.4\,s\), onde \(s\) é o fator de escala.</li>
+  <li><strong>Com magnitude</strong>: \(L = s \cdot \log(1 + |\mathbf{E}|)\). O log comprime a faixa dinâmica, deixando setas distantes ainda visíveis.</li>
+</ul>
+
+<p>O fator \(s\) é:</p>
+
+<div class="math">
+$$s = \begin{cases} \dfrac{0.5}{\max(1, \max(n_x, n_y)/20)} & \text{se auto-escala} \\ s_{\text{user}} & \text{caso contrário} \end{cases}$$
+</div>
+
+<p>Na auto-escala, grades mais densas produzem setas menores, para não haver sobreposição.</p>
+
+<h3>5.3 Coloração</h3>
+
+<p>As setas podem ser coloridas por \(|\mathbf{E}|\) através de um colormap. A normalização usa \(|\mathbf{E}|_{\text{ref}} = \max \log(1+|\mathbf{E}|)\) sobre todos os pontos amostrados:</p>
+
+<div class="math">
+$$t_{ij} = \frac{\log(1+|\mathbf{E}_{ij}|)}{\max_{k,l}\log(1+|\mathbf{E}_{kl}|)}$$
+</div>
+
+<p>e o colormap mapeia \(t \in [0,1]\) para uma cor.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="linhas">
+<h2>6. Linhas de campo</h2>
+
+<p>Uma linha de campo é a curva cuja tangente em cada ponto é paralela a \(\mathbf{E}\). Parametrizando pelo comprimento de arco \(s\):</p>
+
+<div class="math">
+$$\frac{d\mathbf{r}}{ds} = \pm\hat{\mathbf{E}}(\mathbf{r}) \equiv \pm\frac{\mathbf{E}(\mathbf{r})}{\|\mathbf{E}(\mathbf{r})\|}$$
+</div>
+
+<p>O sinal é \(+1\) para linhas que saem de cargas positivas e \(-1\) para linhas que saem de cargas negativas.</p>
+
+<h3>6.1 Sementes em torno das cargas</h3>
+
+<p>Para cada carga \(i\), o programa distribui \(n_i\) sementes num círculo de raio \(r_s = 0.02\) em volta da carga:</p>
+
+<div class="math">
+$$\mathbf{r}_{i,k} = \mathbf{r}_i + r_s\bigl(\cos\theta_{i,k},\; \sin\theta_{i,k}\bigr), \quad \theta_{i,k} = \frac{2\pi k}{n_i} + i\cdot 0.37$$
+</div>
+
+<p>O número de sementes é proporcional ao módulo da carga:</p>
+
+<div class="math">
+$$n_i = \max\!\left(1,\; \text{round}\!\left(N_{\text{linhas}}\,\frac{|q_i|}{\sum_j |q_j|}\right)\right)$$
+</div>
+
+<p>A fase \(i\cdot 0.37\) (irracional) evita que as sementes de cargas vizinhas fiquem alinhadas, o que criaria artefatos visuais.</p>
+
+<h3>6.2 Integração com RK4</h3>
+
+<p>Para cada semente, o programa integra a equação diferencial com RK4 e passo fixo \(h = 0.006 \cdot \max(\Delta x, \Delta y)\) (proporcional ao tamanho da região visível):</p>
+
+<div class="math">
+$$\begin{aligned}
+\mathbf{k}_1 &amp;= \hat{\mathbf{E}}(\mathbf{r}_n) \\
+\mathbf{k}_2 &amp;= \hat{\mathbf{E}}\!\left(\mathbf{r}_n + \tfrac{h}{2}\mathbf{k}_1\right) \\
+\mathbf{k}_3 &amp;= \hat{\mathbf{E}}\!\left(\mathbf{r}_n + \tfrac{h}{2}\mathbf{k}_2\right) \\
+\mathbf{k}_4 &amp;= \hat{\mathbf{E}}\!\left(\mathbf{r}_n + h\,\mathbf{k}_3\right) \\
+\mathbf{r}_{n+1} &amp;= \mathbf{r}_n + \frac{h}{6}\bigl(\mathbf{k}_1 + 2\mathbf{k}_2 + 2\mathbf{k}_3 + \mathbf{k}_4\bigr)
+\end{aligned}$$
+</div>
+
+<p>A integração termina quando:</p>
+
+<ul>
+  <li>\(\mathbf{r}_n\) sai da região visível (com margem de 15%).</li>
+  <li>\(\mathbf{r}_n\) entra num raio \(r_{\text{stop}} = 0.12\) em torno de uma carga de sinal oposto.</li>
+  <li>O número de passos atinge 600.</li>
+  <li>\(|\mathbf{E}| &lt; 10^{-9}\).</li>
+</ul>
+
+<h3>6.3 Remoção de duplicatas</h3>
+
+<p>Duas sementes próximas em cargas opostas podem traçar a mesma linha em sentidos opostos. O programa mantém uma matriz <code>priority[i][j]</code> que registra "linha já traçada de \(i\) para \(j\)" e descarta a segunda ocorrência &mdash; evitando que a mesma curva apareça duas vezes.</p>
+
+<h3>6.4 Coloração</h3>
+
+<p>As linhas podem ser coloridas de duas formas:</p>
+
+<ul>
+  <li><strong>Por linha inteira</strong>: a cor é a média de \(\log(1+|\mathbf{E}|)\) ao longo da linha.</li>
+  <li><strong>Por segmento</strong> (padrão): cada segmento entre dois pontos é colorido por \(\log(1+|\mathbf{E}|)\) no ponto médio. Isso revela como a magnitude varia ao longo da curva.</li>
+</ul>
+
+<p>As setas no meio de cada linha indicam a direção local de \(\mathbf{E}\).</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="equi">
+<h2>7. Equipotenciais</h2>
+
+<p>Uma equipotencial é o conjunto de pontos onde \(V(\mathbf{r}) = \text{constante}\). Como \(\mathbf{E} = -\nabla V\), as equipotenciais são sempre perpendiculares às linhas de campo.</p>
+
+<h3>7.1 Extração por marching squares</h3>
+
+<p>O programa amostra \(V\) numa grade de passo 1 pixel, constrói uma grade de níveis (logarítmica ou linear) e, para cada nível \(L_k\), traça a isolinha correspondente usando a distância local ao nível:</p>
+
+<div class="math">
+$$d_{ij} = \left| \text{frac}\!\left(\frac{L_{ij}}{s}\right) - 0.5 \right| \cdot s$$
+</div>
+
+<p>onde \(s\) é o espaçamento entre níveis. Pontos com \(d_{ij}\) menor que a meia-largura da linha (0.9 pixel) recebem uma intensidade \(t = 1 - d_{ij}/w\), suavizada por smoothstep \(t \to t^2(3-2t)\).</p>
+
+<h3>7.2 Escalas</h3>
+
+<p><strong>Logarítmica</strong> (padrão): os níveis são espaçados em \(\log(1+|V|)\):</p>
+
+<div class="math">
+$$L_k = \frac{k}{n/2} \log(1+|V|_{\max}), \quad k = 1, \ldots, n/2$$
+</div>
+
+<p>e os contornos são traçados em \(\log(1+|V|) = L_k\). Isso produz linhas igualmente espaçadas <em>visualmente</em>, mesmo que \(V\) varie por ordens de grandeza.</p>
+
+<p><strong>Linear</strong>: os níveis são espaçados em \(V\) diretamente:</p>
+
+<div class="math">
+$$L_k = \frac{k}{n/2} \cdot 0.2\,|V|_{\max}$$
+</div>
+
+<p>As linhas ficam muito adensadas perto das cargas (onde \(V\) cresce rápido) e esparsas longe.</p>
+
+<h3>7.3 Coloração</h3>
+
+<p>As equipotenciais podem ser coloridas por \(V\) através de um colormap divergente (RdBu, coolwarm, etc.), com \(V = 0\) no centro. A normalização usa \(|V|_{\text{ref}} = 0.1\max(|V|)\), comprimindo a faixa em torno de zero.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="potencial">
+<h2>8. Mapa de potencial</h2>
+
+<p>Quando "Potencial" está ligado, cada pixel do canvas recebe uma cor calculada a partir de \(V\) naquele ponto, com interpolação bilinear para suavizar.</p>
+
+<h3>8.1 Amostragem e interpolação</h3>
+
+<p>O programa amostra \(V\) numa sub-grade de passo 3 pixels, interpola bilinearmente para cada pixel e aplica o colormap:</p>
+
+<div class="math">
+$$V(x,y) \approx (1-t_x)(1-t_y)V_{00} + t_x(1-t_y)V_{10} + (1-t_x)t_yV_{01} + t_xt_yV_{11}$$
+</div>
+
+<h3>8.2 Colormap divergente</h3>
+
+<p>O mapa usa uma escala de três stops (azul, preto, vermelho):</p>
+
+<div class="math">
+$$\text{cor}(V) = \text{colormap}\!\left(\frac{1}{2} + \frac{V}{2\,|V|_{\max}}\right)$$
+</div>
+
+<p>onde \(|V|_{\max} = 0.1\max(|V_{\min}|, |V_{\max}|)\).</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="medidores">
+<h2>9. Medidores e unidades SI</h2>
+
+<p>Medidores são pontos amostrados que mostram, num balão flutuante:</p>
+
+<ul>
+  <li>O vetor \(\mathbf{E} = (E_x, E_y)\) no ponto.</li>
+  <li>O módulo \(|\mathbf{E}|\).</li>
+  <li>O potencial \(V\).</li>
+</ul>
+
+<h3>9.1 Conversão para SI</h3>
+
+<p>No modo SI, o programa aplica:</p>
+
+<div class="math">
+$$E_{\text{SI}} = E_{\text{adim}} \cdot \frac{k_e\, q_{\text{SI}}}{d_{\text{SI}}^2}, \qquad V_{\text{SI}} = V_{\text{adim}} \cdot \frac{k_e\, q_{\text{SI}}}{d_{\text{SI}}}$$
+</div>
+
+<p>onde \(q_{\text{SI}}\) e \(d_{\text{SI}}\) vêm dos campos de entrada (por exemplo, \(q = 1{,}602 \times 10^{-19}\) C, \(d = 1 \times 10^{-10}\) m para um elétron em escala atômica).</p>
+
+<h3>9.2 Formatação</h3>
+
+<p>Fora do modo SI, os valores são exibidos em notação decimal ou científica, conforme a magnitude:</p>
+
+<div class="math">
+$$\text{fmt}(v) = \begin{cases} v \times 10^{e} \text{ com 3 dígitos} &amp; \text{se } |v| &lt; 10^{-6} \\ v \text{ com 3 decimais} &amp; \text{caso contrário} \end{cases}$$
+</div>
+
+<p>No modo SI, sempre em notação científica \(m \times 10^e\).</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="linha">
+<h2>10. Perfil unidimensional ("Plotar em linha")</h2>
+
+<p>O perfil mostra como \(E_\parallel\) (componente de \(\mathbf{E}\) paralela à linha) e \(V\) variam ao longo de um segmento \(A \to B\) definido pelo usuário.</p>
+
+<h3>10.1 Parametrização</h3>
+
+<p>Seja \(\mathbf{r}_A\) e \(\mathbf{r}_B\) os extremos, \(L = \|\mathbf{r}_B - \mathbf{r}_A\|\) e \(\hat{\mathbf{u}} = (\mathbf{r}_B - \mathbf{r}_A)/L\). O ponto a uma distância \(s\) de \(A\) é:</p>
+
+<div class="math">
+$$\mathbf{r}(s) = \mathbf{r}_A + s\,\hat{\mathbf{u}}, \quad s \in [0, L]$$
+</div>
+
+<h3>10.2 Amostragem e suavização</h3>
+
+<p>O programa amostra 90 pontos igualmente espaçados em \(s\) e calcula:</p>
+
+<div class="math">
+$$E_\parallel(s) = \mathbf{E}(\mathbf{r}(s)) \cdot \hat{\mathbf{u}}, \qquad V(s) = V(\mathbf{r}(s))$$
+</div>
+
+<p>Depois, aplica uma interpolação Catmull&ndash;Rom com fator 6 para suavizar as curvas (o que também reduz ruído numérico perto das cargas):</p>
+
+<div class="math">
+$$\mathbf{p}(t) = \frac{1}{2}\Bigl[2\mathbf{p}_1 + (-\mathbf{p}_0 + \mathbf{p}_2)t + (2\mathbf{p}_0 - 5\mathbf{p}_1 + 4\mathbf{p}_2 - \mathbf{p}_3)t^2 + (-\mathbf{p}_0 + 3\mathbf{p}_1 - 3\mathbf{p}_2 + \mathbf{p}_3)t^3\Bigr]$$
+</div>
+
+<h3>10.3 Escala logarítmica</h3>
+
+<p>O usuário pode escolher entre escala linear e logarítmica simétrica:</p>
+
+<div class="math">
+$$\text{symlog}(v) = \text{sgn}(v) \cdot \log(1 + |v|)$$
+</div>
+
+<p>Isso permite visualizar curvas que variam por muitas ordens de grandeza sem que os valores pequenos desapareçam.</p>
+
+<h3>10.4 Função de referência</h3>
+
+<p>Para comparar o decaimento de \(E\) e \(V\) com um modelo teórico, o programa oferece uma função de referência configurável:</p>
+
+<div class="math">
+$$f_{\text{ref}}(s) = c \cdot |g(\mathbf{r}(s))|^p$$
+</div>
+
+<p>onde \(g \in \{r, x, y, s\}\) é escolhido pelo usuário (raio, coordenada \(x\), \(y\) ou posição ao longo da linha), \(p \in [-6, 6]\) é a potência e \(c \in [-10, 10]\) é uma constante.</p>
+
+<p>Há três modos de normalização:</p>
+
+<table>
+  <tr><th>Modo</th><th>Efeito</th></tr>
+  <tr><td>Constante</td><td>\(f_{\text{ref}} = c \cdot |g|^p\).</td></tr>
+  <tr><td>Limitar por |E|</td><td>Redimensiona \(f_{\text{ref}}\) para que seu máximo coincida com \(\max|E_\parallel|\).</td></tr>
+  <tr><td>Limitar por |V|</td><td>Idem, com \(\max|V|\).</td></tr>
+</table>
+
+<p>Isso facilita verificar, por exemplo, que \(E \sim 1/r^2\) e \(V \sim 1/r\) para uma carga pontual.</p>
+
+<h3>10.5 Sonda</h3>
+
+<p>Um marcador verde na linha principal permite amostrar \(E_\parallel\) e \(V\) num ponto específico. O valor é exibido no painel lateral e na leitura do gráfico.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="arq">
+<h2>11. Arquitetura do programa</h2>
+
+<p>O simulador é uma página HTML com JavaScript inline. O fluxo de uma renderização é:</p>
+
+<div class="step">
+  <span class="label">1</span>
+  <strong>Ler o estado</strong>: configuração de cargas (posições, \(q_i\)), opções de visualização, medidores, estado do perfil.
+</div>
+
+<div class="step">
+  <span class="label">2</span>
+  <strong>Desenhar o fundo de potencial</strong> (se ligado): amostrar \(V\) em sub-grade, interpolar e colorir.
+</div>
+
+<div class="step">
+  <span class="label">3</span>
+  <strong>Desenhar equipotenciais</strong> (se ligado): amostrar \(V\) em grade fina, calcular distância local aos níveis, compor.
+</div>
+
+<div class="step">
+  <span class="label">4</span>
+  <strong>Desenhar linhas de campo</strong> (se ligado): gerar sementes, integrar com RK4, colorir por segmento.
+</div>
+
+<div class="step">
+  <span class="label">5</span>
+  <strong>Desenhar setas de campo</strong> (se ligado): amostrar em grade, desenhar setas coloridas.
+</div>
+
+<div class="step">
+  <span class="label">6</span>
+  <strong>Desenhar eixos, cargas, medidores e overlay do perfil</strong>.
+</div>
+
+<div class="step">
+  <span class="label">7</span>
+  <strong>Atualizar o gráfico do perfil</strong> (se aberto): amostrar a linha, suavizar e plotar.
+</div>
+
+<h3>Estruturas de dados</h3>
+
+<ul>
+  <li><code>state</code>: objeto com todas as opções persistentes (modo, cargas, escalas, toggles).</li>
+  <li><code>state.q</code>: array de 50 cargas (as primeiras <code>numCharges</code> ativas).</li>
+  <li><code>state.positions</code>: posições congeladas quando o modo é <code>custom</code>.</li>
+  <li><code>meters</code>: lista de medidores.</li>
+  <li><code>linePlot</code>: estado do perfil (pontos \(A\), \(B\), sonda, escala, referência).</li>
+</ul>
+
+<h3>Histórico (undo/redo)</h3>
+
+<p>Operações que mudam cargas, medidores ou modo salvam um snapshot em <code>history</code> (até 20 entradas). O snapshot inclui modo, \(N\), \(q_i\), posições, medidores, escala e parâmetros SI. Ctrl+Z / Ctrl+Y navegam pelo histórico.</p>
+
+<h3>Cache de cores</h3>
+
+<p>Os colormaps são armazenados como arrays de stops RGB e interpolados on-demand. Não há cache por valor, mas a interpolação é barata o suficiente para ser feita em linha.</p>
+
+<h3>Canvas e DPR</h3>
+
+<p>O canvas tem resolução lógica fixa de \(1080 \times 1080\) pixels. O tamanho físico é ajustado pelo modo de visualização ("Redimensionar" ou "Cortar"), mas a resolução interna é constante &mdash; o que evita recomputar toda a imagem a cada mudança de janela.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="limites">
+<h2>12. Limitações e escolhas numéricas</h2>
+
+<h3>12.1 Regularização</h3>
+<p>As constantes \(\varepsilon_E = 0.1\) e \(\varepsilon_V = 0.05\) evitam a singularidade exata nas cargas, mas distorcem a magnitude a distâncias menores que ~0,5 unidade. Para resultados quantitativos, use pontos afastados das cargas.</p>
+
+<h3>12.2 Integração com passo fixo</h3>
+<p>As linhas de campo usam RK4 com passo fixo. Perto das cargas, o erro é maior; longe, o passo é conservador. Um passo adaptativo melhoraria a precisão perto das cargas, mas aumentaria a complexidade.</p>
+
+<h3>12.3 Grid das equipotenciais</h3>
+<p>As equipotenciais são calculadas em grid de 1 pixel, o que limita a resolução da isolinha à resolução do canvas. Detalhes abaixo de ~2 pixels não são capturados.</p>
+
+<h3>12.4 Escala logarítmica</h3>
+<p>O uso de \(\log(1+|V|)\) para os níveis de equipotencial tem duas consequências:</p>
+<ul>
+  <li>Perto de \(V = 0\), a escala comprime os níveis em valores minúsculos, o que é bom visualmente.</li>
+  <li>Longe de \(V = 0\), a escala expande os níveis, revelando gradientes que seriam invisíveis numa escala linear.</li>
+</ul>
+
+<h3>12.5 Modo SI</h3>
+<p>A conversão SI é aplicada apenas aos medidores e ao perfil. O canvas principal continua em unidades arbitrárias &mdash; a geometria do campo não muda com o sistema de unidades. Para ver valores SI, use os medidores ou a leitura do perfil.</p>
+
+<h3>12.6 Física simplificada</h3>
+<ul>
+  <li>Eletrostática: sem campos magnéticos, sem indução, sem cargas em movimento.</li>
+  <li>Sem meios materiais: \(\varepsilon_r = 1\) em todo o espaço.</li>
+  <li>Sem blindagem, sem condução, sem corrente.</li>
+  <li>Cargas pontuais, sem extensão física.</li>
+</ul>
+
+<div class="note">
+Dentro dessas aproximações, o simulador resolve a lei de Coulomb com superposição e a representa com técnicas de visualização padrão (marching squares, RK4, colormaps). É uma ferramenta didática, não um solver de elementos finitos.
+</div>
+</section>
+
+<footer>
+Por MPC10N3K.<br>
+<a href="https://github.com/MPC10N3K/Sim-Eletromagnetismo" target="_blank" rel="noopener">GitHub</a>
+</footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,1567 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Simulador de Equação da Onda</title>
+<script src="https://cdn.jsdelivr.net/npm/mathjs@12.4.2/lib/browser/math.js"></script>
+<style>
+:root{
+  --panel-bg:#f4f4f6; --accent:#6c5ce7; --accent-dark:#5a4bd0;
+  --text:#1c1c22; --border:#ddd; --card:#fff; --hdr:#fafafa;
+}
+body.dark{--panel-bg:#14151a;--text:#e6e6ee;--border:#2a2b33;--card:#1c1d24;--hdr:#22232b}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#000;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;color:var(--text)}
+.app{display:flex;height:100%;width:100%;overflow:hidden}
+.stage{position:relative;flex:1 1 auto;min-width:0;background:#000;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:10px}
+canvas#cv{background:#000;border:1px solid #555;image-rendering:pixelated}
+canvas#cv.view-fit{max-width:100%;max-height:100%}
+canvas#cv.view-crop{max-width:none;max-height:none;flex:0 0 auto}
+#hud{position:absolute;top:18px;left:18px;pointer-events:none;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;line-height:1.5;color:#cfcfe0;background:rgba(10,10,16,.6);padding:6px 10px;border-radius:6px;backdrop-filter:blur(4px);white-space:pre;user-select:none}
+#hud b{color:#9a8cff;font-weight:600}
+#hud .warn{color:#ffb454}
+.panel{flex:0 0 340px;background:var(--panel-bg);padding:14px 18px;overflow-y:auto;border-left:1px solid var(--border);color:var(--text)}
+@media(max-width:800px){.app{flex-direction:column}.stage{flex:0 0 52%}.panel{flex:1 1 auto;border-left:0;border-top:1px solid var(--border);padding:12px}}
+label{display:block;font-size:12.5px;margin:8px 0 4px;color:var(--text);opacity:.85}
+input,select,button{font:inherit;font-size:13px;max-width:100%}
+input[type=text],input[type=number],select{width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:6px;background:var(--card);color:var(--text)}
+input[type=text]{font-family:ui-monospace,Menlo,monospace;font-size:12.5px}
+input[type=range]{width:100%;accent-color:var(--accent);padding:0}
+input[type=number]{font-variant-numeric:tabular-nums}
+input[type=checkbox],input[type=radio]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+.check{display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer;user-select:none;margin:6px 0 0}
+.radio-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:6px 0 0}
+.radio-row label{display:flex;align-items:center;gap:6px;margin:0;font-size:13px;cursor:pointer}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 8px}
+.prow{display:grid;grid-template-columns:32px 1fr 72px;gap:6px;align-items:center;margin:4px 0}
+.prow b{font-size:13px;color:var(--accent-dark);font-family:ui-monospace,Menlo,monospace}
+button{background:var(--accent);color:#fff;border:none;border-radius:6px;padding:8px 14px;cursor:pointer;transition:background .15s,opacity .15s}
+button:hover{background:var(--accent-dark)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.sec{background:var(--card);color:var(--text);border:1px solid var(--border)}
+button.sec:hover{background:var(--hdr)}
+button.active{box-shadow:inset 0 0 0 2px var(--accent)}
+.btn-row{display:flex;gap:8px;align-items:center;margin:4px 0 10px;flex-wrap:wrap}
+.btn-row button{flex:1}
+.collapsible-section{margin-bottom:12px;border:1px solid var(--border);border-radius:8px;background:var(--card);overflow:hidden}
+.collapsible-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;user-select:none;background:var(--hdr);transition:background .2s}
+.collapsible-header:hover{filter:brightness(.97)}
+.collapsible-header h2{margin:0;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:#888}
+.collapsible-toggle{font-size:14px;color:#888;display:inline-block;transition:transform .3s ease}
+.collapsible-toggle.open{transform:rotate(180deg)}
+.collapsible-content{max-height:0;overflow:hidden;padding:0 14px;transition:max-height .3s ease,padding .3s ease}
+.collapsible-content.open{max-height:none;padding:6px 14px 14px}
+.exec-bar{position:sticky;top:-14px;background:var(--panel-bg);padding:10px 0 8px;margin:-14px 0 12px;border-bottom:1px solid var(--border);z-index:10;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.exec-bar button{flex:1 1 auto;min-width:90px}
+.exec-status{font-size:12px;color:#888;padding:0 4px;flex:0 0 auto}
+.exec-status.running{color:#2e7d32;font-weight:600}
+.exec-status.paused{color:#f57c00;font-weight:600}
+#err{color:#c0392b;font-size:12px;white-space:pre-wrap;margin-bottom:8px;min-height:1em}
+.field-hint{font-size:11px;color:#888;margin:2px 0 4px;line-height:1.35}
+.derived{font-size:11.5px;color:#666;font-family:ui-monospace,Menlo,monospace;margin-top:6px;padding:6px 8px;background:#f0f0f2;border-radius:4px}
+body.dark .derived{background:#22232b}
+.watermark{margin-top:20px;padding-top:16px;border-top:1px solid var(--border);font-size:12px;color:#999;text-align:center;line-height:1.6}
+.watermark a{color:var(--accent);text-decoration:none}
+.watermark a:hover{text-decoration:underline}
+.panel-setup.locked{opacity:.5;pointer-events:none}
+#modeHint{font-size:11.5px;color:#666;margin:4px 0 0;padding:6px 8px;border-radius:4px;background:#fff3cd;color:#856404;display:none}
+#modeHint.active{display:block}
+.motion-section{margin-top:4px}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="stage">
+    <canvas id="cv" width="300" height="300" class="view-fit"></canvas>
+    <div id="hud">—</div>
+  </div>
+  <div class="panel" id="side">
+
+    <div class="exec-bar">
+      <button id="btnStart" type="button">▶ Iniciar</button>
+      <button id="btnPause" type="button" disabled>⏸ Pausar</button>
+      <button id="btnStop" type="button" disabled>⏹ Encerrar</button>
+      <span class="exec-status" id="execStatus">Configuração</span>
+    </div>
+
+    <div id="err"></div>
+
+    <!-- DOMÍNIO -->
+    <div class="collapsible-section panel-setup">
+      <div class="collapsible-header"><h2>Domínio</h2><span class="collapsible-toggle open">▼</span></div>
+      <div class="collapsible-content open">
+        <div class="g2">
+          <div><label>W = <span class="val" id="lblW">1</span></label><input type="range" id="sldW" min="0.5" max="4" step="0.1" value="1"></div>
+          <div><label>H = <span class="val" id="lblH">1</span></label><input type="range" id="sldH" min="0.5" max="4" step="0.1" value="1"></div>
+        </div>
+        <div class="g2">
+          <div><label>nx = <span class="val" id="lblNx">300</span></label><input type="range" id="sldNx" min="60" max="512" step="2" value="300"></div>
+          <div><label>ny = <span class="val" id="lblNy">300</span></label><input type="range" id="sldNy" min="60" max="512" step="2" value="300"></div>
+        </div>
+        <div class="g2">
+          <div><label>x<sub>c</sub> = <span class="val" id="lblXc">0</span></label><input type="range" id="sldXc" min="-2" max="2" step="0.05" value="0"></div>
+          <div><label>y<sub>c</sub> = <span class="val" id="lblYc">0</span></label><input type="range" id="sldYc" min="-2" max="2" step="0.05" value="0"></div>
+        </div>
+        <div class="derived" id="derivedInfo">dx = — · dt = —</div>
+      </div>
+    </div>
+
+    <!-- ONDA -->
+    <div class="collapsible-section panel-setup">
+      <div class="collapsible-header"><h2>Onda</h2><span class="collapsible-toggle open">▼</span></div>
+      <div class="collapsible-content open">
+        <div class="g2">
+          <div><label>c = <span class="val" id="lblC">1.00</span></label><input type="range" id="sldC" min="0.1" max="3" step="0.05" value="1"></div>
+          <div><label>CFL = <span class="val" id="lblCfl">0.50</span></label><input type="range" id="sldCfl" min="0.1" max="0.9" step="0.01" value="0.5"></div>
+        </div>
+        <div><label>Passos de física por frame = <span class="val" id="lblSpf">1</span></label><input type="range" id="sldSpf" min="1" max="8" step="1" value="1"></div>
+        <div class="field-hint">CFL &gt; 0.7 pode causar instabilidade no esquema 9-point.</div>
+      </div>
+    </div>
+
+    <!-- ABSORÇÃO -->
+    <div class="collapsible-section panel-setup">
+      <div class="collapsible-header"><h2>Absorção</h2><span class="collapsible-toggle open">▼</span></div>
+      <div class="collapsible-content open">
+        <label>Tipo</label>
+        <select id="selSigmaType">
+          <option value="circular">Circular (com abertura)</option>
+          <option value="open">Abertura radial</option>
+          <option value="horizontal">Horizontal</option>
+          <option value="vertical">Vertical</option>
+          <option value="rect">Retangular</option>
+        </select>
+        <div class="g2">
+          <div><label>absorb_width = <span class="val" id="lblAW">0.25</span></label><input type="range" id="sldAW" min="0.05" max="1" step="0.01" value="0.25"></div>
+          <div><label>σ máx = <span class="val" id="lblAS">200</span></label><input type="range" id="sldAS" min="20" max="500" step="10" value="200"></div>
+        </div>
+        <div id="sigmaExtraWrap" style="display:none">
+          <div class="g2">
+            <div><label>θ<sub>0</sub> = <span class="val" id="lblTheta0">3.14</span></label><input type="range" id="sldTheta0" min="0" max="6.28" step="0.05" value="3.1416"></div>
+            <div><label>abertura = <span class="val" id="lblOpening">0.39</span></label><input type="range" id="sldOpening" min="0.05" max="3.14" step="0.05" value="0.3927"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONDIÇÃO INICIAL -->
+    <div class="collapsible-section panel-setup">
+      <div class="collapsible-header"><h2>Condição inicial</h2><span class="collapsible-toggle open">▼</span></div>
+      <div class="collapsible-content open">
+        <label>Tipo</label>
+        <select id="selInitType">
+          <option value="zero">Zero</option>
+          <option value="gaussian">Gaussiana</option>
+          <option value="expression">Expressão personalizada</option>
+        </select>
+        <div id="initGaussWrap" style="display:none">
+          <div class="g2">
+            <div><label>Amplitude = <span class="val" id="lblInitAmp">1</span></label><input type="range" id="sldInitAmp" min="-2" max="2" step="0.1" value="1"></div>
+            <div><label>Largura = <span class="val" id="lblInitWidth">0.1</span></label><input type="range" id="sldInitWidth" min="0.01" max="0.5" step="0.01" value="0.1"></div>
+          </div>
+        </div>
+        <div id="initExprWrap" style="display:none">
+          <label>Expressão Z(x, y)</label>
+          <input type="text" id="txtInitExpr" value="0">
+          <div class="field-hint">Variáveis livres viram sliders abaixo (math.js).</div>
+          <div id="initParams"></div>
+        </div>
+        <div class="field-hint" style="margin-top:6px">O campo radiado começa em <code>Z_init</code>, de modo que <code>Z_total(t=0) = Z_init + Σ campos das partículas</code> (o campo próprio de cada partícula já é o estado estacionário, sem pulso espúrio de partida).</div>
+      </div>
+    </div>
+
+    <!-- FONTE EXTERNA -->
+    <div class="collapsible-section panel-setup">
+      <div class="collapsible-header"><h2>Fonte externa</h2><span class="collapsible-toggle open">▼</span></div>
+      <div class="collapsible-content open">
+        <label class="check"><input type="checkbox" id="chkExtSource"> Ativar fonte externa</label>
+        <div id="extSourceWrap" style="display:none">
+          <label>Expressão f(x, y, t)</label>
+          <input type="text" id="txtForceExpr" value="0">
+          <div class="field-hint">Ex.: <code>sin(2*pi*t*20) * exp(-((x-x0)^2+(y-y0)^2)/w^2)</code></div>
+          <div id="forceParams"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PARTÍCULAS -->
+    <div class="collapsible-section panel-setup">
+      <div class="collapsible-header"><h2>Partículas</h2><span class="collapsible-toggle open">▼</span></div>
+      <div class="collapsible-content open">
+        <div class="g2">
+          <div><label>Nº = <span class="val" id="lblNP">20</span></label><input type="range" id="sldNP" min="0" max="200" step="1" value="20"></div>
+          <div><label>Largura d = <span class="val" id="lblPW">0.02</span></label><input type="range" id="sldPW" min="0.005" max="0.2" step="0.005" value="0.02"></div>
+        </div>
+        <div class="g2">
+          <div><label>Massa = <span class="val" id="lblMass">0.01</span></label><input type="range" id="sldMass" min="0.001" max="0.5" step="0.001" value="0.01"></div>
+          <div><label>Carga = <span class="val" id="lblCharge">0.01</span></label><input type="range" id="sldCharge" min="-0.5" max="0.5" step="0.005" value="0.01"></div>
+        </div>
+        <label class="check"><input type="checkbox" id="chkConjugate"> Cargas alternadas (+/−)</label>
+        <label class="check"><input type="checkbox" id="chkPreventSuperluminal" checked> Impedir velocidade &gt; c</label>
+      </div>
+    </div>
+
+    <!-- DISTRIBUIÇÃO -->
+    <div class="collapsible-section panel-setup">
+      <div class="collapsible-header"><h2>Distribuição inicial</h2><span class="collapsible-toggle open">▼</span></div>
+      <div class="collapsible-content open">
+        <label>Tipo</label>
+        <select id="selDistType">
+          <option value="ring">Anel</option>
+          <option value="line">Linha</option>
+          <option value="none">Centro</option>
+        </select>
+        <div class="g2">
+          <div><label>Centro x = <span class="val" id="lblDcx">0</span></label><input type="range" id="sldDcx" min="-2" max="2" step="0.05" value="0"></div>
+          <div><label>Centro y = <span class="val" id="lblDcy">0</span></label><input type="range" id="sldDcy" min="-2" max="2" step="0.05" value="0"></div>
+        </div>
+        <div class="g3">
+          <div><label>Tamanho = <span class="val" id="lblDlen">0.1</span></label><input type="range" id="sldDlen" min="0.01" max="2" step="0.01" value="0.1"></div>
+          <div><label>Ângulo = <span class="val" id="lblDang">0</span></label><input type="range" id="sldDang" min="0" max="360" step="1" value="0"></div>
+          <div><label>Proporção = <span class="val" id="lblDprop">1</span></label><input type="range" id="sldDprop" min="0.1" max="5" step="0.1" value="1"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MOVIMENTO -->
+    <div class="collapsible-section panel-setup">
+      <div class="collapsible-header"><h2>Movimento</h2><span class="collapsible-toggle open">▼</span></div>
+      <div class="collapsible-content open">
+        <label>Preset</label>
+        <select id="selMotionPreset">
+          <option value="stationary">Estacionário</option>
+          <option value="z-wave">Onda em z</option>
+          <option value="x-wave" selected>Onda em x</option>
+          <option value="x-wiggle">Oscilação em x</option>
+          <option value="circle">Círculo</option>
+          <option value="linear">Linear</option>
+          <option value="accelerate">Aceleração</option>
+          <option value="interact">Interação de campo</option>
+          <option value="orbit">Órbita</option>
+          <option value="custom">Personalizado (expressões)</option>
+        </select>
+
+        <div id="motionBuiltinWrap" class="motion-section" style="display:none">
+          <div id="motionControls"></div>
+        </div>
+
+        <div id="customMotionWrap" style="display:none">
+          <label>Modo</label>
+          <div class="radio-row">
+            <label><input type="radio" name="motionMode" value="offset" checked> Deslocamento (∫v·dt)</label>
+            <label><input type="radio" name="motionMode" value="absolute"> Posição paramétrica</label>
+          </div>
+          <label>x(t)</label><input type="text" id="txtMotionX" value="0">
+          <label>y(t)</label><input type="text" id="txtMotionY" value="0">
+          <label>z(t)</label><input type="text" id="txtMotionZ" value="0">
+          <div class="field-hint">Variáveis disponíveis: <code>t</code> (tempo), <code>i</code> (índice da partícula), <code>n</code> (total). Variáveis livres viram sliders abaixo. Modo "Deslocamento" integra; "Posição" sobrescreve.</div>
+          <div id="motionParams"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODO INTERATIVO -->
+    <div class="collapsible-section">
+      <div class="collapsible-header"><h2>Modo interativo</h2><span class="collapsible-toggle open">▼</span></div>
+      <div class="collapsible-content open">
+        <label class="check"><input type="checkbox" id="chkInteractive"> Ativar arrastar/criar partículas</label>
+        <div class="btn-row">
+          <button id="btnAddParticle" type="button" class="sec" disabled>➕ Criar partícula</button>
+          <button id="btnRemoveParticle" type="button" class="sec" disabled>➖ Remover</button>
+        </div>
+        <div id="modeHint">Clique no canvas para criar a partícula. Clique numa partícula para removê-la. Arraste para mover.</div>
+      </div>
+    </div>
+
+    <!-- RENDER -->
+    <div class="collapsible-section">
+      <div class="collapsible-header"><h2>Render</h2><span class="collapsible-toggle open">▼</span></div>
+      <div class="collapsible-content open">
+        <label>Campo a exibir</label>
+        <div class="radio-row">
+          <label><input type="radio" name="showField" value="radiative"> Radiado</label>
+          <label><input type="radio" name="showField" value="total" checked> Total (rad + part.)</label>
+        </div>
+        <label>Colormap</label>
+        <select id="selColorMap">
+          <option value="RdBu_r" selected>RdBu reverso (azul-vermelho)</option>
+          <option value="coolwarm">Coolwarm</option>
+          <option value="seismic">Seismic</option>
+          <option value="viridis">Viridis</option>
+          <option value="inferno">Inferno</option>
+          <option value="plasma">Plasma</option>
+          <option value="magma">Magma</option>
+          <option value="cividis">Cividis</option>
+        </select>
+        <div class="g2">
+          <div><label>v<sub>min</sub> = <span class="val" id="lblVmin">auto</span></label><input type="range" id="sldVmin" min="-2" max="2" step="0.01" value="-1"></div>
+          <div><label>v<sub>max</sub> = <span class="val" id="lblVmax">auto</span></label><input type="range" id="sldVmax" min="-2" max="2" step="0.01" value="1"></div>
+        </div>
+        <label class="check"><input type="checkbox" id="chkVauto" checked> Auto v<sub>min</sub>/v<sub>max</sub></label>
+        <label>Fator de cor = <span class="val" id="lblCF">1.12</span></label>
+        <input type="range" id="sldCF" min="0.5" max="2" step="0.01" value="1.125">
+        <label class="check"><input type="checkbox" id="chkShowParticles" checked> Mostrar partículas</label>
+        <label class="check"><input type="checkbox" id="chkShowAxes" checked> Mostrar eixos</label>
+        <label class="check"><input type="checkbox" id="chkShowGrid"> Grade</label>
+        <div class="btn-row" style="margin-top:8px">
+          <button id="btnViewFit" class="sec active" type="button">Redimensionar</button>
+          <button id="btnViewCrop" class="sec" type="button">Cortar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button id="btnReset" class="sec" type="button">↺ Restaurar padrões</button>
+    </div>
+
+    <div class="watermark">
+      <div>Por Marcelo Prado Cionek</div>
+      <div><a href="mailto:mpcionek@outlook.com">mpcionek@outlook.com</a></div>
+      <div><a href="https://github.com/MPC10N3K/Sim-Eletromagnetismo" target="_blank" rel="noopener">GitHub</a></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// =========================================================================
+//  CONSTANTES
+// =========================================================================
+const MAX_PARTICLES = 200;
+// 'i' e 'n' são reservados (índice e total de partículas) — não viram sliders.
+const SKIP = new Set(['t','s','pi','e','tau','PI','E','i','phi','Infinity','NaN','true','false','x','y','z','i','n']);
+
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+let viewMode = 'fit';
+
+// =========================================================================
+//  STATE
+// =========================================================================
+const state = {
+  W: 1, H: 1, nx: 300, ny: 300, xc: 0, yc: 0,
+  c: 1, cfl: 0.5, stepsPerFrame: 1,
+  sigmaType: 'circular', absorbWidth: 0.25, absorbStrength: 200,
+  theta0: Math.PI, opening: Math.PI/8,
+  initType: 'zero', initAmp: 1, initWidth: 0.1, initExpr: '0',
+  useExtSource: false, forceExpr: '0',
+  numParticles: 20, mass: 0.01, charge: 0.01, conjugate: false,
+  pulseWidth: 0.02, preventSuperluminal: true, speedCap: 0.99,
+  distType: 'ring', distCx: 0, distCy: 0, distLen: 0.1, distAng: 0, distProp: 1,
+  motionPreset: 'x-wave', motionMode: 'offset',
+  motionX: '0', motionY: '0', motionZ: '0',
+  colorMap: 'RdBu_r', vmin: -1, vmax: 1, vAuto: true, colorFactor: 1.125,
+  showField: 'total', showParticles: true, showAxes: true, showGrid: false,
+  interactive: false
+};
+
+const MOTION_SCHEMAS = {
+  stationary: [],
+  'z-wave': [
+    { key: 'freqZ', label: 'freq z', min: 0, max: 5, step: 0.05, def: 1 },
+    { key: 'ampZ',  label: 'amp z',  min: 0, max: 0.5, step: 0.005, def: 0.01 }
+  ],
+  'x-wave': [
+    { key: 'freqX', label: 'freq x', min: 0, max: 5, step: 0.05, def: 1 },
+    { key: 'ampX',  label: 'amp x',  min: 0, max: 0.5, step: 0.005, def: 0.01 },
+    { key: 'phaseSpread', label: 'defasagem entre partículas (×2π)', min: 0, max: 1, step: 0.05, def: 1 }
+  ],
+  'x-wiggle': [
+    { key: 'freqX', label: 'freq x', min: 0, max: 5, step: 0.05, def: 1 },
+    { key: 'ampX',  label: 'amp x',  min: 0, max: 0.5, step: 0.005, def: 0.1 }
+  ],
+  circle: [
+    { key: 'freqX', label: 'freq x', min: 0, max: 5, step: 0.05, def: 1 },
+    { key: 'freqY', label: 'freq y', min: 0, max: 5, step: 0.05, def: 1 },
+    { key: 'ampX',  label: 'amp x',  min: 0, max: 0.5, step: 0.005, def: 0.1 },
+    { key: 'ampY',  label: 'amp y',  min: 0, max: 0.5, step: 0.005, def: 0.1 }
+  ],
+  linear: [
+    { key: 'velX',    label: 'vel x', min: -1, max: 1, step: 0.01, def: 0.1 },
+    { key: 'velY',    label: 'vel y', min: -1, max: 1, step: 0.01, def: 0 },
+    { key: 'linDelay', label: 'delay entre partículas (×dt)', min: 0, max: 60, step: 1, def: 15 }
+  ],
+  accelerate: [
+    { key: 'accX',     label: 'acel x', min: -1, max: 1, step: 0.01, def: 0.1 },
+    { key: 'accY',     label: 'acel y', min: -1, max: 1, step: 0.01, def: 0 },
+    { key: 'quadDelay', label: 'delay entre partículas (×dt)', min: 0, max: 60, step: 1, def: 1 }
+  ],
+  interact: [
+    { key: 'coupling', label: 'acoplamento', min: 0, max: 10, step: 0.1, def: 1 }
+  ],
+  orbit: [
+    { key: 'velX',    label: 'vel x inicial', min: -0.5, max: 0.5, step: 0.005, def: 0.01 },
+    { key: 'coupling', label: 'acoplamento',  min: 0,   max: 10,  step: 0.1,   def: 1 }
+  ],
+  custom: []
+};
+
+let motionState = {};
+function resetMotionState() {
+  motionState = {};
+  for (const k in MOTION_SCHEMAS) {
+    MOTION_SCHEMAS[k].forEach(f => { if (!(f.key in motionState)) motionState[f.key] = f.def; });
+  }
+}
+resetMotionState();
+
+const sim = {
+  nx: 0, ny: 0, dx: 0, dt: 0,
+  W: 1, H: 1, xc: 0, yc: 0,
+  Z_prev: null, Z_curr: null, Z_next: null,
+  sigma: null,
+  numParticles: 0,
+  x_pos: null, y_pos: null, z_pos: null,
+  x_pos_new: null, y_pos_new: null, z_pos_new: null,
+  vz: null,
+  pulse_width: null, masses: null, charges: null,
+  motion_params: [],
+  particle_prev: null, particle_before_prev: null, particle_total: null,
+  time: 0, frame: 0, step: 0,
+  superluminalEvents: 0,
+  initialised: false
+};
+
+const compiled = { init: null, force: null, motionX: null, motionY: null, motionZ: null };
+let initParamsObj = {}, forceParamsObj = {}, motionParamsObj = {};
+
+// =========================================================================
+//  UI STATE
+// =========================================================================
+const UI = { SETUP:'setup', RUNNING:'running', PAUSED:'paused' };
+let uiState = UI.SETUP;
+let rafId = null, lastTime = 0;
+let fpsAccum = 0, fpsCount = 0, currentFps = 0;
+let pendingCreateMode = false, pendingRemoveMode = false;
+
+// =========================================================================
+//  COMPILAÇÃO
+// =========================================================================
+const compileCache = new Map();
+const CACHE_MAX = 80;
+
+function getCompiled(text) {
+  const key = String(text).trim();
+  if (compileCache.has(key)) return compileCache.get(key);
+  let c;
+  try { c = math.parse(key).compile(); }
+  catch (e) { throw new Error('Expressão inválida: "' + key + '" — ' + e.message); }
+  compileCache.set(key, c);
+  while (compileCache.size > CACHE_MAX) compileCache.delete(compileCache.keys().next().value);
+  return c;
+}
+function getNode(text) {
+  try { return math.parse(String(text).trim()); }
+  catch (e) { throw new Error('Expressão inválida: "' + text + '" — ' + e.message); }
+}
+function syms(nodes) {
+  const out = [], as = new Set();
+  nodes.forEach(n => n.traverse(x => {
+    if (x.isAssignmentNode && x.object && x.object.name) as.add(x.object.name);
+  }));
+  nodes.forEach(n => n.traverse((x, p, par) => {
+    if (x.isSymbolNode && !(par && par.isFunctionNode && p === 'fn')
+        && !SKIP.has(x.name) && typeof math[x.name] !== 'function'
+        && !as.has(x.name) && !out.includes(x.name)) out.push(x.name);
+  }));
+  return out;
+}
+
+function buildParamSliders(containerId, names, paramsObj) {
+  const box = document.getElementById(containerId);
+  if (!box) return;
+  box.innerHTML = '';
+  if (!names.length) { box.innerHTML = '<span style="color:#999;font-size:12px">nenhum</span>'; return; }
+  names.forEach(n => {
+    const v = paramsObj[n] ?? (paramsObj[n] = 1);
+    const M = Math.max(5, Math.ceil(Math.abs(v) * 3));
+    const d = document.createElement('div');
+    d.className = 'prow';
+    d.innerHTML = `<b>${n}</b>
+      <input type="range" data-param="${n}" data-container="${containerId}" min="${-M}" max="${M}" step="0.01" value="${v}">
+      <input type="number" data-param="${n}" data-container="${containerId}" min="${-M}" step="0.01" value="${v}">`;
+    box.appendChild(d);
+  });
+}
+
+function bindParamInputs() {
+  document.querySelectorAll('[data-param]').forEach(el => {
+    el.addEventListener('input', e => {
+      const n = e.target.dataset.param;
+      const cid = e.target.dataset.container;
+      const v = parseFloat(e.target.value);
+      if (!isFinite(v)) return;
+      const obj = cid === 'initParams' ? initParamsObj
+                : cid === 'forceParams' ? forceParamsObj
+                : motionParamsObj;
+      obj[n] = v;
+      e.target.parentElement.querySelectorAll('input').forEach(i => { if (i !== e.target) i.value = v; });
+      if (uiState === UI.SETUP) render();
+    });
+  });
+}
+
+function updateDerivedInfo() {
+  const dx = state.W / Math.max(1, state.nx - 1);
+  const dt = state.cfl * dx / state.c;
+  document.getElementById('derivedInfo').textContent =
+    `dx = ${dx.toExponential(3)} · dt = ${dt.toExponential(3)} · dt/dx = ${(dt/dx).toFixed(3)}`;
+}
+
+// =========================================================================
+//  COLORMAPS
+// =========================================================================
+const CMAPS = {
+  viridis: [[0.267,0.004,0.329],[0.283,0.141,0.458],[0.254,0.265,0.530],[0.207,0.383,0.546],[0.164,0.494,0.522],[0.160,0.599,0.477],[0.230,0.700,0.407],[0.367,0.785,0.325],[0.552,0.849,0.233],[0.758,0.884,0.147],[0.956,0.889,0.176],[0.993,0.914,0.499]],
+  inferno: [[0,0,0.015],[0.129,0,0.273],[0.251,0,0.444],[0.368,0,0.565],[0.485,0.108,0.611],[0.589,0.232,0.611],[0.689,0.359,0.577],[0.786,0.486,0.508],[0.871,0.624,0.409],[0.937,0.771,0.294],[0.974,0.897,0.194],[0.988,0.99,0.612]],
+  plasma: [[0.05,0.03,0.53],[0.188,0,0.613],[0.32,0,0.635],[0.45,0,0.599],[0.573,0,0.509],[0.69,0.148,0.383],[0.793,0.305,0.256],[0.878,0.471,0.157],[0.941,0.652,0.098],[0.977,0.837,0.082],[0.984,0.947,0.247],[0.988,0.99,0.612]],
+  magma: [[0,0,0.015],[0.129,0,0.273],[0.251,0,0.444],[0.368,0,0.565],[0.485,0.108,0.611],[0.589,0.232,0.611],[0.689,0.359,0.577],[0.786,0.486,0.508],[0.871,0.624,0.409],[0.937,0.771,0.294],[0.974,0.897,0.194],[0.988,0.99,0.612]],
+  cividis: [[0,0.135,0.304],[0.051,0.179,0.364],[0.126,0.224,0.415],[0.21,0.269,0.45],[0.297,0.314,0.468],[0.383,0.36,0.472],[0.47,0.408,0.462],[0.557,0.459,0.439],[0.643,0.513,0.404],[0.73,0.574,0.354],[0.822,0.644,0.289],[0.924,0.735,0.204]],
+  RdBu_r: [[0.019,0.188,0.380],[0.129,0.400,0.675],[0.263,0.576,0.765],[0.572,0.773,0.871],[0.819,0.898,0.941],[0.969,0.969,0.969],[0.992,0.859,0.780],[0.957,0.647,0.510],[0.839,0.376,0.302],[0.698,0.094,0.168],[0.404,0,0.122]],
+  coolwarm: [[0.23,0.299,0.754],[0.364,0.489,0.906],[0.553,0.690,0.996],[0.753,0.830,0.961],[0.912,0.942,0.992],[0.969,0.969,0.969],[0.992,0.916,0.855],[0.957,0.707,0.605],[0.839,0.376,0.302],[0.706,0.016,0.150],[0.706,0.016,0.150]],
+  seismic: [[0,0,0.3],[0,0,0.7],[0.2,0.2,1],[0.6,0.6,1],[0.85,0.85,1],[1,1,1],[1,0.85,0.85],[1,0.6,0.6],[1,0.2,0.2],[0.7,0,0],[0.3,0,0]]
+};
+
+let colorLUT = null;
+function buildColorLUT() {
+  const arr = CMAPS[state.colorMap] || CMAPS.RdBu_r;
+  const lut = new Uint8ClampedArray(256 * 3);
+  for (let i = 0; i < 256; i++) {
+    const t = i / 255;
+    const idx = t * (arr.length - 1);
+    const i0 = Math.floor(idx), i1 = Math.min(i0 + 1, arr.length - 1);
+    const f = idx - i0;
+    const c0 = arr[i0], c1 = arr[i1];
+    lut[i*3]   = Math.round((c0[0] + (c1[0]-c0[0])*f) * 255);
+    lut[i*3+1] = Math.round((c0[1] + (c1[1]-c0[1])*f) * 255);
+    lut[i*3+2] = Math.round((c0[2] + (c1[2]-c0[2])*f) * 255);
+  }
+  colorLUT = lut;
+}
+
+// =========================================================================
+//  GEOMETRIA
+// =========================================================================
+function resizeCanvas() {
+  const stage = cv.parentElement;
+  cv.classList.toggle('view-fit', viewMode === 'fit');
+  cv.classList.toggle('view-crop', viewMode === 'crop');
+  const rect = stage.getBoundingClientRect();
+  const avail = Math.max(50, Math.min(rect.width, rect.height) - 20);
+  if (viewMode === 'fit') {
+    cv.style.width = avail + 'px';
+    cv.style.height = avail + 'px';
+  } else {
+    const size = Math.min(rect.width, rect.height) * 1.4;
+    cv.style.width = size + 'px';
+    cv.style.height = size + 'px';
+  }
+}
+window.addEventListener('resize', resizeCanvas);
+
+function worldToPixel(x, y) {
+  const i = ((x - (sim.xc - sim.W/2)) / sim.W) * sim.nx;
+  const j = ((y - (sim.yc - sim.H/2)) / sim.H) * sim.ny;
+  return [i, sim.ny - 1 - j];
+}
+function pixelToWorld(px, py) {
+  const rect = cv.getBoundingClientRect();
+  const cx = (px - rect.left) / rect.width * cv.width;
+  const cy = (py - rect.top) / rect.height * cv.height;
+  const i = cx / cv.width * sim.nx;
+  const j = sim.ny - 1 - cy / cv.height * sim.ny;
+  const x = (sim.xc - sim.W/2) + (i / sim.nx) * sim.W;
+  const y = (sim.yc - sim.H/2) + (j / sim.ny) * sim.H;
+  return [x, y];
+}
+
+// =========================================================================
+//  FÍSICA
+// =========================================================================
+function sigmaProfile() {
+  const { nx, ny, dx, W, H, xc, yc } = sim;
+  const aw = state.absorbWidth;
+  const smax = state.absorbStrength;
+  const out = new Float32Array(nx * ny);
+  const Rmax = Math.min(W, H) / 2;
+  const R0 = Rmax - aw;
+  const type = state.sigmaType;
+  for (let j = 0; j < ny; j++) {
+    const y = (yc - H/2) + j * dx;
+    for (let i = 0; i < nx; i++) {
+      const x = (xc - W/2) + i * dx;
+      const rdx = x - xc, rdy = y - yc;
+      let s = 0;
+      if (type === 'circular' || type === 'open') {
+        const R = Math.hypot(rdx, rdy);
+        s = Math.max(0, Math.min(1, (R - R0) / aw));
+        if (type === 'open') {
+          const theta = Math.atan2(rdy, rdx);
+          const dth = Math.atan2(Math.sin(theta - state.theta0), Math.cos(theta - state.theta0));
+          if (Math.abs(dth) < state.opening) s = 0;
+        }
+        out[j*nx + i] = smax * Math.pow(s, 4);
+      } else if (type === 'horizontal') {
+        const Ymax = H / 2;
+        const Y0 = Ymax - 1.125 * aw;
+        s = Math.max(0, Math.min(1, (Math.abs(rdy) - Y0) / aw));
+        out[j*nx + i] = smax * Math.pow(s, 4);
+      } else if (type === 'vertical') {
+        const Xmax = W / 2;
+        const X0 = Xmax - 1.125 * aw;
+        s = Math.max(0, Math.min(1, (Math.abs(rdx) - X0) / aw));
+        out[j*nx + i] = smax * Math.pow(s, 4);
+      } else {
+        const sx = Math.max(0, Math.min(1, (Math.abs(rdx) - (W/2 - aw)) / aw));
+        const sy = Math.max(0, Math.min(1, (Math.abs(rdy) - (H/2 - aw)) / aw));
+        const s2 = Math.max(sx, sy);
+        out[j*nx + i] = smax * Math.pow(s2, 4);
+      }
+    }
+  }
+  return out;
+}
+
+function laplace9(Z, out) {
+  const { nx, ny, dx } = sim;
+  const inv = 1 / (6 * dx * dx);
+  for (let i = 0; i < nx; i++) { out[i] = 0; out[(ny-1)*nx + i] = 0; }
+  for (let j = 0; j < ny; j++) { out[j*nx] = 0; out[j*nx + nx-1] = 0; }
+  for (let j = 1; j < ny - 1; j++) {
+    const row = j * nx;
+    for (let i = 1; i < nx - 1; i++) {
+      const c = row + i;
+      out[c] = (
+        4 * (Z[c - nx] + Z[c + nx] + Z[c - 1] + Z[c + 1]) +
+        (Z[c - nx - 1] + Z[c - nx + 1] + Z[c + nx - 1] + Z[c + nx + 1]) -
+        20 * Z[c]
+      ) * inv;
+    }
+  }
+}
+
+function computeParticleTotal(out) {
+  const { nx, ny, dx, xc, yc, W, H } = sim;
+  if (!out) out = new Float32Array(nx * ny);
+  else out.fill(0);
+  const nP = sim.numParticles;
+  if (nP === 0) return out;
+  for (let k = 0; k < nP; k++) {
+    const xk = sim.x_pos[k], yk = sim.y_pos[k], zk = sim.z_pos[k];
+    const wk = sim.pulse_width[k];
+    const qk = sim.charges[k];
+    const invw2 = 1 / (wk*wk);
+    const rad = 3 * wk;
+    const iMin = Math.max(0, Math.floor((xk - rad - (xc - W/2)) / dx));
+    const iMax = Math.min(nx - 1, Math.ceil((xk + rad - (xc - W/2)) / dx));
+    const jMin = Math.max(0, Math.floor((yk - rad - (yc - H/2)) / dx));
+    const jMax = Math.min(ny - 1, Math.ceil((yk + rad - (yc - H/2)) / dx));
+    for (let j = jMin; j <= jMax; j++) {
+      const yv = (yc - H/2) + j * dx;
+      const dy = yv - yk;
+      for (let i = iMin; i <= iMax; i++) {
+        const xv = (xc - W/2) + i * dx;
+        const ddx = xv - xk;
+        const r2 = ddx*ddx + dy*dy + zk*zk;
+        out[j*nx + i] += qk * Math.exp(-r2 * invw2);
+      }
+    }
+  }
+  return out;
+}
+
+// --- avaliação de expressões ---
+function evalInitExpr(x, y) {
+  if (!compiled.init) return 0;
+  try {
+    const v = compiled.init.evaluate({ x, y, ...initParamsObj });
+    return typeof v === 'number' && isFinite(v) ? v : 0;
+  } catch (e) { return 0; }
+}
+function evalForceExpr(x, y, t) {
+  if (!compiled.force) return 0;
+  try {
+    const v = compiled.force.evaluate({ x, y, t, ...forceParamsObj });
+    return typeof v === 'number' && isFinite(v) ? v : 0;
+  } catch (e) { return 0; }
+}
+// i, n disponíveis apenas para movimento personalizado
+function evalMotionExpr(kind, t, i, n) {
+  const c = kind === 'x' ? compiled.motionX
+          : kind === 'y' ? compiled.motionY
+          : compiled.motionZ;
+  if (!c) return 0;
+  try {
+    const v = c.evaluate({ t, i, n, ...motionParamsObj });
+    return typeof v === 'number' && isFinite(v) ? v : 0;
+  } catch (e) { return 0; }
+}
+
+function buildMotionParams(preset) {
+  const n = state.numParticles;
+  const dt = sim.dt;
+  const m = motionState;
+  const arr = [];
+  for (let i = 0; i < n; i++) {
+    const base = {
+      vel: [0, 0], acc: [0, 0],
+      lin_delay: 0, quad_delay: 0, osc_delay: 0,
+      lin_end: Infinity, quad_end: Infinity, osc_end: Infinity,
+      phase: [0, 0, 0], freq: [0, 0, 0], amp: [0, 0, 0]
+    };
+    if (preset === 'z-wave') {
+      base.freq = [0, 0, m.freqZ ?? 1];
+      base.amp  = [0, 0, m.ampZ ?? 0.01];
+    } else if (preset === 'x-wave') {
+      const spread = m.phaseSpread ?? 1;
+      base.freq  = [m.freqX ?? 1, 0, 0];
+      base.amp   = [m.ampX ?? 0.01, 0, 0];
+      base.phase = [2 * Math.PI * spread * i / Math.max(1, n), 0, 0];
+    } else if (preset === 'x-wiggle') {
+      base.freq = [m.freqX ?? 1, 0, 0];
+      base.amp  = [m.ampX ?? 0.1, 0, 0];
+    } else if (preset === 'circle') {
+      base.freq  = [m.freqX ?? 1, m.freqY ?? 1, 0];
+      base.amp   = [m.ampX ?? 0.1, m.ampY ?? 0.1, 0];
+      base.phase = [2*Math.PI*i/Math.max(1,n), 2*Math.PI*i/Math.max(1,n) - Math.PI/2, 0];
+    } else if (preset === 'linear') {
+      base.vel = [m.velX ?? 0.1, m.velY ?? 0];
+      base.lin_delay = i * (m.linDelay ?? 15) * dt;
+    } else if (preset === 'accelerate') {
+      base.acc = [m.accX ?? 0.1, m.accY ?? 0];
+      base.quad_delay = i * (m.quadDelay ?? 1) * dt;
+    } else if (preset === 'orbit') {
+      base.vel = [m.velX ?? 0.01, 0];
+    }
+    arr.push(base);
+  }
+  return arr;
+}
+
+function sampleField(x, y) {
+  // interpolação bilinear na malha x_i = x0 + i·dx (dx = W/(nx-1)), usando Z_rad
+  const fx = (x - (sim.xc - sim.W/2)) / sim.dx;
+  const fy = (y - (sim.yc - sim.H/2)) / sim.dx;
+  const i0 = Math.floor(fx), j0 = Math.floor(fy);
+  if (i0 < 0 || i0 >= sim.nx - 1 || j0 < 0 || j0 >= sim.ny - 1) return 0;
+  const tx = fx - i0, ty = fy - j0;
+  const Z = sim.Z_curr, nx = sim.nx;
+  const k = j0 * nx + i0;
+  return (1-ty) * ((1-tx) * Z[k]      + tx * Z[k+1]) +
+            ty  * ((1-tx) * Z[k+nx]   + tx * Z[k+nx+1]);
+}
+
+function updateParticleMotion() {
+  const dt = sim.dt;
+  const preset = state.motionPreset;
+  const n = sim.numParticles;
+  const cap = state.speedCap * state.c * dt;
+  const coupling = motionState.coupling ?? 1;
+  for (let i = 0; i < n; i++) {
+    let dxm = 0, dym = 0, dzm = 0;
+    if (preset === 'custom') {
+      const mx = evalMotionExpr('x', sim.time, i, n);
+      const my = evalMotionExpr('y', sim.time, i, n);
+      const mz = evalMotionExpr('z', sim.time, i, n);
+      if (state.motionMode === 'absolute') {
+        sim.x_pos_new[i] = mx; sim.y_pos_new[i] = my; sim.z_pos_new[i] = mz;
+        sim.x_pos[i] = mx; sim.y_pos[i] = my; sim.z_pos[i] = mz;
+        continue;
+      } else {
+        dxm = mx * dt; dym = my * dt; dzm = mz * dt;
+      }
+    } else if (preset !== 'stationary') {
+      const p = sim.motion_params[i];
+      const t = sim.time;
+      if (preset === 'z-wave') {
+        const af = 2 * Math.PI * p.freq[2];
+        dzm = af * p.amp[2] * Math.cos(af * t - p.phase[2]) * dt;
+      } else if (preset === 'x-wave') {
+        const af = 2 * Math.PI * p.freq[0];
+        dxm = af * p.amp[0] * Math.cos(af * t - p.phase[0]) * dt;
+      } else if (preset === 'x-wiggle') {
+        const af = 2 * Math.PI * p.freq[0];
+        dxm = af * p.amp[0] * Math.cos(af * t) * dt;
+      } else if (preset === 'circle') {
+        const afx = 2 * Math.PI * p.freq[0], afy = 2 * Math.PI * p.freq[1];
+        dxm = afx * p.amp[0] * Math.cos(afx * t - p.phase[0]) * dt;
+        dym = afy * p.amp[1] * Math.cos(afy * t - p.phase[1]) * dt;
+      } else if (preset === 'linear') {
+        if (t > p.lin_delay && t < p.lin_end) {
+          dxm = p.vel[0] * dt; dym = p.vel[1] * dt;
+        }
+      } else if (preset === 'accelerate') {
+        if (t > p.quad_delay && t < p.quad_end) {
+          dxm = p.acc[0] / 2 * dt * (t - p.quad_delay);
+          dym = p.acc[1] / 2 * dt * (t - p.quad_delay);
+        }
+      } else if (preset === 'interact') {
+        // z'' = coupling · (q/m) · Z_rad(x,y)  — Euler semi-implícito (velocidade em vz)
+        const zval = sampleField(sim.x_pos[i], sim.y_pos[i]);
+        sim.vz[i] += coupling * zval * sim.charges[i] / sim.masses[i] * dt;
+        dzm = sim.vz[i] * dt;
+      } else if (preset === 'orbit') {
+        dxm = p.vel[0] * dt;
+        const zval = sampleField(sim.x_pos[i], sim.y_pos[i]);
+        sim.vz[i] += coupling * zval * sim.charges[i] / sim.masses[i] * dt;
+        dzm = sim.vz[i] * dt;
+      }
+    }
+    if (state.preventSuperluminal) {
+      const mag = Math.hypot(dxm, dym, dzm);
+      if (mag > cap && mag > 0) {
+        const f = cap / mag;
+        dxm *= f; dym *= f; dzm *= f;
+        if (preset === 'interact' || preset === 'orbit') sim.vz[i] = dzm / dt;
+        sim.superluminalEvents++;
+      }
+    }
+    sim.x_pos_new[i] = sim.x_pos[i] + dxm;
+    sim.y_pos_new[i] = sim.y_pos[i] + dym;
+    sim.z_pos_new[i] = sim.z_pos[i] + dzm;
+    sim.x_pos[i] = sim.x_pos_new[i];
+    sim.y_pos[i] = sim.y_pos_new[i];
+    sim.z_pos[i] = sim.z_pos_new[i];
+  }
+}
+
+// =========================================================================
+//  INICIALIZAÇÃO E PASSO
+// =========================================================================
+function distributeParticles() {
+  const n = state.numParticles;
+  const cx = state.distCx, cy = state.distCy;
+  const type = state.distType;
+  const xs = new Float32Array(MAX_PARTICLES);
+  const ys = new Float32Array(MAX_PARTICLES);
+  const zs = new Float32Array(MAX_PARTICLES);
+  if (type === 'none' || n === 1) {
+    for (let i = 0; i < n; i++) { xs[i] = cx; ys[i] = cy; zs[i] = 0; }
+  } else if (type === 'line') {
+    const ang = state.distAng * Math.PI / 180;
+    const xr = Math.cos(ang) * state.distLen;
+    const yr = Math.sin(ang) * state.distLen;
+    for (let i = 0; i < n; i++) {
+      const f = n === 1 ? 0.5 : (i - (n-1)/2) / (n-1);
+      xs[i] = cx + xr * f; ys[i] = cy + yr * f; zs[i] = 0;
+    }
+  } else {
+    const rad = state.distLen / 2;
+    const ang = state.distAng * Math.PI / 180;
+    const p = state.distProp;
+    const rx = rad * p, ry = rad / p;
+    for (let i = 0; i < n; i++) {
+      const th = 2 * Math.PI * i / n + ang;
+      xs[i] = cx + rx * Math.cos(th);
+      ys[i] = cy + ry * Math.sin(th);
+      zs[i] = 0;
+    }
+  }
+  sim.x_pos = xs; sim.y_pos = ys; sim.z_pos = zs;
+  sim.x_pos_new = new Float32Array(xs);
+  sim.y_pos_new = new Float32Array(ys);
+  sim.z_pos_new = new Float32Array(zs);
+  sim.vz = new Float32Array(MAX_PARTICLES);
+  sim.pulse_width = new Float32Array(MAX_PARTICLES);
+  sim.masses = new Float32Array(MAX_PARTICLES);
+  sim.charges = new Float32Array(MAX_PARTICLES);
+  for (let i = 0; i < n; i++) {
+    sim.pulse_width[i] = state.pulseWidth;
+    sim.masses[i] = state.mass;
+    sim.charges[i] = state.conjugate ? state.charge * (i % 2 === 0 ? 1 : -1) : state.charge;
+  }
+  sim.numParticles = n;
+}
+
+function initialFieldAt(x, y) {
+  if (state.initType === 'zero') return 0;
+  if (state.initType === 'gaussian') {
+    const dx = x - state.xc, dy = y - state.yc;
+    return state.initAmp * Math.exp(-(dx*dx + dy*dy) / (state.initWidth * state.initWidth));
+  }
+  return evalInitExpr(x, y);
+}
+
+// Constante
+const RAMP_STEPS = 5; // rampa de ativação do acoplamento partícula→campo
+
+function initSimulation() {
+  sim.W = state.W; sim.H = state.H; sim.xc = state.xc; sim.yc = state.yc;
+  sim.nx = state.nx; sim.ny = state.ny;
+  sim.dx = state.W / Math.max(1, state.nx - 1);
+  sim.dt = state.cfl * sim.dx / state.c;
+  const N = sim.nx * sim.ny;
+  sim.Z_prev = new Float32Array(N);
+  sim.Z_curr = new Float32Array(N);
+  sim.Z_next = new Float32Array(N);
+  sim.sigma = sigmaProfile();
+
+  // 1. distribui partículas (posição t=0 "ingênua")
+  distributeParticles();
+  sim.motion_params = buildMotionParams(state.motionPreset);
+
+  // 2. histórico de partículas consistente: roda o movimento até 2 passos
+  //    "antes" do t=0 apresentado, para que delta2 no primeiro step seja
+  //    uma segunda diferença bem definida (sem descontinuidade em t=0).
+  const particle_t_minus2 = computeParticleTotal(null);   // pos. t=0 bruta
+  updateParticleMotion();                                  // avança 1 passo
+  const particle_t_minus1 = computeParticleTotal(null);
+  updateParticleMotion();                                  // avança outro
+  const particle_t_0      = computeParticleTotal(null);   // pos. de exibição em t=0
+
+  sim.particle_before_prev = new Float32Array(particle_t_minus2);
+  sim.particle_prev        = new Float32Array(particle_t_minus1);
+  sim.particle_total       = new Float32Array(particle_t_0);
+
+  // 3. condição inicial do campo radiado.
+  //    Z_total = Z_rad + P. O campo próprio P da partícula já é (quase) o estado
+  //    estacionário da equação com fonte; começar com Z_rad = Z_init − P (Z_total = Z_init)
+  //    "liga" a fonte sobre um meio em repouso e Z_rad = −P se dispersa como onda livre
+  //    (é isso que gerava o pulso). Aqui Z_rad(0) = Z_init  ⇒  Z_total(0) = Z_init + P.
+  for (let j = 0; j < sim.ny; j++) {
+    const y = (sim.yc - sim.H/2) + j * sim.dx;
+    for (let i = 0; i < sim.nx; i++) {
+      const x = (sim.xc - sim.W/2) + i * sim.dx;
+      const v = initialFieldAt(x, y);
+      sim.Z_curr[j*sim.nx + i] = v;
+      sim.Z_prev[j*sim.nx + i] = v;
+    }
+  }
+
+  sim.time = 0; sim.frame = 0; sim.step = 0;
+  sim.superluminalEvents = 0;
+  sim.initialised = true;
+  buildColorLUT();
+  cv.width = sim.nx;
+  cv.height = sim.ny;
+  resizeCanvas();
+}
+
+function stepSimulation() {
+  updateParticleMotion();
+  computeParticleTotal(sim.particle_total);
+  const N = sim.nx * sim.ny;
+  const delta2 = new Float32Array(N);
+  // rampa de ativação: evita transiente residual nos primeiros passos
+  const ramp = Math.min(1, sim.step / RAMP_STEPS);
+  for (let k = 0; k < N; k++) {
+    delta2[k] = ramp * (
+      sim.particle_total[k] - 2*sim.particle_prev[k] + sim.particle_before_prev[k]
+    );
+  }
+  let forceVals = null;
+  if (state.useExtSource && compiled.force) {
+    forceVals = new Float32Array(N);
+    for (let j = 0; j < sim.ny; j++) {
+      const y = (sim.yc - sim.H/2) + j * sim.dx;
+      for (let i = 0; i < sim.nx; i++) {
+        const x = (sim.xc - sim.W/2) + i * sim.dx;
+        forceVals[j*sim.nx + i] = evalForceExpr(x, y, sim.time);
+      }
+    }
+  }
+  const lap = new Float32Array(N);
+  laplace9(sim.Z_curr, lap);
+  const cdt2 = (state.c * sim.dt) * (state.c * sim.dt);
+  const dt = sim.dt;
+  for (let k = 0; k < N; k++) {
+    let v = 2*sim.Z_curr[k] - sim.Z_prev[k] + cdt2 * lap[k] + delta2[k];
+    if (forceVals) v += forceVals[k] * dt * dt;
+    v -= sim.sigma[k] * (sim.Z_curr[k] - sim.Z_prev[k]) * dt;
+    sim.Z_next[k] = v;
+  }
+  const tmp = sim.Z_prev;
+  sim.Z_prev = sim.Z_curr;
+  sim.Z_curr = sim.Z_next;
+  sim.Z_next = tmp;
+  const ptmp = sim.particle_before_prev;
+  sim.particle_before_prev = sim.particle_prev;
+  sim.particle_prev = sim.particle_total;
+  sim.particle_total = ptmp;
+  sim.time += sim.dt;
+  sim.frame++;
+  sim.step++;
+}
+
+// =========================================================================
+//  RECONCILIAÇÃO DE PARTÍCULAS (teleporte limpo em PAUSED)
+// =========================================================================
+function onParticlesChangedTeleport() {
+  if (!sim.initialised || uiState === UI.RUNNING) return;
+  const oldTotal = sim.particle_prev;
+  const newTotal = computeParticleTotal(null);
+  // Compensar Z para que Z_total permaneça contínuo:
+  //   Z_total = Z_rad + particle_total
+  // Queremos Z_rad_new = Z_rad_old + (oldTotal − newTotal)
+  // para preservar Z_total.
+  for (let k = 0; k < sim.Z_curr.length; k++) {
+    const diff = oldTotal[k] - newTotal[k];
+    sim.Z_curr[k] += diff;
+    sim.Z_prev[k] += diff;
+  }
+  sim.particle_prev = newTotal;
+  sim.particle_before_prev = new Float32Array(newTotal);
+  sim.particle_total = new Float32Array(newTotal);
+}
+
+// =========================================================================
+//  RENDER
+// =========================================================================
+let autoVmin = -1, autoVmax = 1;
+function computeAutoRange() {
+  const N = sim.nx * sim.ny;
+  let mn = Infinity, mx = -Infinity;
+  const showTotal = state.showField === 'total';
+  for (let k = 0; k < N; k++) {
+    let v = sim.Z_curr[k];
+    if (showTotal) v += sim.particle_prev[k];
+    if (v < mn) mn = v;
+    if (v > mx) mx = v;
+  }
+  if (!isFinite(mn) || !isFinite(mx) || mn === mx) { mn = -1; mx = 1; }
+  const f = state.colorFactor;
+  autoVmin = mn * f;
+  autoVmax = mx * f;
+}
+
+function render() {
+  if (!sim.initialised) {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    return;
+  }
+  if (state.vAuto) {
+    computeAutoRange();
+    state.vmin = autoVmin;
+    state.vmax = autoVmax;
+    document.getElementById('lblVmin').textContent = autoVmin.toFixed(3);
+    document.getElementById('lblVmax').textContent = autoVmax.toFixed(3);
+  }
+  const W = sim.nx, H = sim.ny;
+  const img = ctx.getImageData(0, 0, W, H);
+  const data = img.data;
+  const vmin = state.vmin, vmax = state.vmax;
+  const inv = 1 / Math.max(1e-12, vmax - vmin);
+  const showTotal = state.showField === 'total';
+  for (let j = 0; j < H; j++) {
+    const row = j * W;
+    const prow = (H - 1 - j) * W;
+    for (let i = 0; i < W; i++) {
+      let v = sim.Z_curr[row + i];
+      if (showTotal) v += sim.particle_prev[row + i];
+      let t = (v - vmin) * inv;
+      if (t < 0) t = 0; else if (t > 1) t = 1;
+      const lut = Math.round(t * 255) * 3;
+      const idx = (prow + i) * 4;
+      data[idx]   = colorLUT[lut];
+      data[idx+1] = colorLUT[lut+1];
+      data[idx+2] = colorLUT[lut+2];
+      data[idx+3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  if (state.showParticles && sim.numParticles > 0) {
+    const qmax = Math.max(1e-9, ...Array.from(sim.charges).slice(0, sim.numParticles).map(Math.abs));
+    for (let i = 0; i < sim.numParticles; i++) {
+      const [px, py] = worldToPixel(sim.x_pos[i], sim.y_pos[i]);
+      const q = sim.charges[i];
+      const ratio = Math.min(1, Math.abs(q) / qmax);
+      let r, g, b;
+      if (q >= 0) { r = 255; g = Math.round(255 * (1 - ratio * 0.7)); b = Math.round(255 * (1 - ratio * 0.7)); }
+      else { r = Math.round(255 * (1 - ratio * 0.7)); g = 255; b = 255; }
+      ctx.beginPath();
+      ctx.arc(px, py, Math.max(2, cv.width / sim.nx * 1.5), 0, 2 * Math.PI);
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.fill();
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    }
+  }
+  if (state.showAxes) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    const [cxp, cyp] = worldToPixel(sim.xc, sim.yc);
+    ctx.moveTo(0, cyp); ctx.lineTo(cv.width, cyp);
+    ctx.moveTo(cxp, 0); ctx.lineTo(cxp, cv.height);
+    ctx.stroke();
+  }
+  if (state.showGrid) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 0.5;
+    const step = Math.max(1, Math.floor(sim.nx / 10));
+    for (let i = step; i < sim.nx; i += step) {
+      ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, cv.height); ctx.stroke();
+    }
+    for (let j = step; j < sim.ny; j += step) {
+      ctx.beginPath(); ctx.moveTo(0, j); ctx.lineTo(cv.width, j); ctx.stroke();
+    }
+  }
+  updateHUD();
+}
+
+function updateHUD() {
+  const hud = document.getElementById('hud');
+  const t = sim.time, f = sim.frame, nP = sim.numParticles;
+  let w = '';
+  if (sim.superluminalEvents > 0) w += `\n<span class="warn">⚠ superluminal: ${sim.superluminalEvents}</span>`;
+  hud.innerHTML =
+    `<b>t</b> = ${t.toFixed(4)}  <b>frame</b> = ${f}\n` +
+    `<b>dt</b> = ${sim.dt.toExponential(2)}  <b>dx</b> = ${sim.dx.toExponential(2)}\n` +
+    `<b>grade</b> = ${sim.nx}×${sim.ny}  <b>N<sub>p</sub></b> = ${nP}\n` +
+    `<b>FPS</b> = ${currentFps.toFixed(1)}` + w;
+}
+
+// =========================================================================
+//  LOOP
+// =========================================================================
+function loop(now) {
+  if (uiState !== UI.RUNNING) return;
+  const realDt = now - lastTime;
+  lastTime = now;
+  fpsAccum += realDt; fpsCount++;
+  if (fpsAccum >= 500) {
+    currentFps = fpsCount / (fpsAccum / 1000);
+    fpsAccum = 0; fpsCount = 0;
+  }
+  for (let s = 0; s < state.stepsPerFrame; s++) {
+    try { stepSimulation(); }
+    catch (e) { showError(e.message); stopSimulation(); return; }
+  }
+  render();
+  rafId = requestAnimationFrame(loop);
+}
+
+// =========================================================================
+//  CONTROLE
+// =========================================================================
+function showError(msg) { document.getElementById('err').textContent = msg; }
+function clearError() { document.getElementById('err').textContent = ''; }
+
+function compileAllExpressions() {
+  if (state.initType === 'expression') {
+    const node = getNode(state.initExpr);
+    const vars = syms([node]).filter(v => v !== 'x' && v !== 'y');
+    buildParamSliders('initParams', vars, initParamsObj);
+    bindParamInputs();
+    compiled.init = getCompiled(state.initExpr);
+  } else compiled.init = null;
+
+  if (state.useExtSource) {
+    const node = getNode(state.forceExpr);
+    const vars = syms([node]).filter(v => !['x','y','t'].includes(v));
+    buildParamSliders('forceParams', vars, forceParamsObj);
+    bindParamInputs();
+    compiled.force = getCompiled(state.forceExpr);
+  } else compiled.force = null;
+
+  if (state.motionPreset === 'custom') {
+    const nodes = [getNode(state.motionX), getNode(state.motionY), getNode(state.motionZ)];
+    const vars = syms(nodes).filter(v => v !== 't'); // i, n já estão em SKIP
+    buildParamSliders('motionParams', vars, motionParamsObj);
+    bindParamInputs();
+    compiled.motionX = getCompiled(state.motionX);
+    compiled.motionY = getCompiled(state.motionY);
+    compiled.motionZ = getCompiled(state.motionZ);
+  }
+}
+
+function startSimulation() {
+  clearError();
+  try { compileAllExpressions(); }
+  catch (e) { showError(e.message); return; }
+  try { initSimulation(); }
+  catch (e) { showError('Erro na inicialização: ' + e.message); return; }
+  uiState = UI.RUNNING;
+  updateUIForState();
+  render();
+  lastTime = performance.now();
+  rafId = requestAnimationFrame(loop);
+}
+function pauseSimulation() {
+  if (uiState === UI.RUNNING) {
+    uiState = UI.PAUSED;
+    cancelAnimationFrame(rafId);
+  } else if (uiState === UI.PAUSED) {
+    uiState = UI.RUNNING;
+    lastTime = performance.now();
+    rafId = requestAnimationFrame(loop);
+  }
+  updateUIForState();
+}
+function stopSimulation() {
+  cancelAnimationFrame(rafId);
+  uiState = UI.SETUP;
+  sim.initialised = false;
+  updateUIForState();
+  render();
+}
+function updateUIForState() {
+  const setupOnly = uiState === UI.SETUP;
+  document.querySelectorAll('.panel-setup').forEach(el => el.classList.toggle('locked', !setupOnly));
+  document.getElementById('btnStart').disabled = !setupOnly;
+  document.getElementById('btnPause').disabled = setupOnly;
+  document.getElementById('btnStop').disabled = setupOnly;
+  document.getElementById('btnPause').textContent = uiState === UI.PAUSED ? '▶ Retomar' : '⏸ Pausar';
+  const st = document.getElementById('execStatus');
+  st.textContent = { setup:'Configuração', running:'Executando', paused:'Pausado' }[uiState];
+  st.className = 'exec-status ' + uiState;
+  document.getElementById('btnAddParticle').disabled = !state.interactive;
+  document.getElementById('btnRemoveParticle').disabled = !state.interactive;
+}
+
+// =========================================================================
+//  MODO INTERATIVO
+// =========================================================================
+let draggingParticle = -1;
+
+function findParticleAt(wx, wy) {
+  if (!sim.initialised) return -1;
+  const tol = 2 * sim.dx;
+  for (let i = 0; i < sim.numParticles; i++) {
+    if (Math.hypot(wx - sim.x_pos[i], wy - sim.y_pos[i]) < tol) return i;
+  }
+  return -1;
+}
+
+function handlePointerDown(evt) {
+  if (!state.interactive || !sim.initialised || uiState === UI.SETUP) return;
+  const [wx, wy] = pixelToWorld(evt.clientX, evt.clientY);
+  if (pendingCreateMode) {
+    addParticle(wx, wy);
+    pendingCreateMode = false;
+    document.getElementById('btnAddParticle').classList.remove('active');
+    render();
+    evt.preventDefault();
+    return;
+  }
+  if (pendingRemoveMode) {
+    const idx = findParticleAt(wx, wy);
+    if (idx >= 0) removeParticle(idx);
+    pendingRemoveMode = false;
+    document.getElementById('btnRemoveParticle').classList.remove('active');
+    render();
+    evt.preventDefault();
+    return;
+  }
+  const idx = findParticleAt(wx, wy);
+  if (idx >= 0) {
+    draggingParticle = idx;
+    cv.style.cursor = 'grabbing';
+    evt.preventDefault();
+  }
+}
+function handlePointerMove(evt) {
+  if (draggingParticle < 0 || !sim.initialised) return;
+  const [wx, wy] = pixelToWorld(evt.clientX, evt.clientY);
+  sim.x_pos[draggingParticle] = wx;
+  sim.y_pos[draggingParticle] = wy;
+  sim.x_pos_new[draggingParticle] = wx;
+  sim.y_pos_new[draggingParticle] = wy;
+  render();
+  evt.preventDefault();
+}
+function handlePointerUp() {
+  if (draggingParticle >= 0) {
+    draggingParticle = -1;
+    cv.style.cursor = state.interactive ? 'grab' : 'default';
+    // Se pausado, teleporte limpo (sem pulso); se rodando, o próximo step gera pulso físico.
+    onParticlesChangedTeleport();
+  }
+}
+function addParticle(wx, wy) {
+  if (sim.numParticles >= MAX_PARTICLES) { showError('Limite de ' + MAX_PARTICLES + ' partículas.'); return; }
+  const i = sim.numParticles;
+  sim.x_pos[i] = wx; sim.y_pos[i] = wy; sim.z_pos[i] = 0;
+  sim.x_pos_new[i] = wx; sim.y_pos_new[i] = wy; sim.z_pos_new[i] = 0;
+  sim.vz[i] = 0;
+  sim.pulse_width[i] = state.pulseWidth;
+  sim.masses[i] = state.mass;
+  sim.charges[i] = state.conjugate ? state.charge * (i % 2 === 0 ? 1 : -1) : state.charge;
+  sim.motion_params.push({ vel:[0,0], acc:[0,0], lin_delay:0, quad_delay:0, osc_delay:0,
+                           lin_end:Infinity, quad_end:Infinity, osc_end:Infinity,
+                           phase:[0,0,0], freq:[0,0,0], amp:[0,0,0] });
+  sim.numParticles++;
+  onParticlesChangedTeleport();
+}
+function removeParticle(idx) {
+  if (idx < 0 || idx >= sim.numParticles) return;
+  const n = sim.numParticles;
+  for (let k = idx; k < n - 1; k++) {
+    sim.x_pos[k] = sim.x_pos[k+1]; sim.y_pos[k] = sim.y_pos[k+1]; sim.z_pos[k] = sim.z_pos[k+1];
+    sim.x_pos_new[k] = sim.x_pos_new[k+1]; sim.y_pos_new[k] = sim.y_pos_new[k+1]; sim.z_pos_new[k] = sim.z_pos_new[k+1];
+    sim.vz[k] = sim.vz[k+1];
+    sim.pulse_width[k] = sim.pulse_width[k+1];
+    sim.masses[k] = sim.masses[k+1];
+    sim.charges[k] = sim.charges[k+1];
+    sim.motion_params[k] = sim.motion_params[k+1];
+  }
+  sim.numParticles--;
+  onParticlesChangedTeleport();
+}
+
+// =========================================================================
+//  CONTROLES DE MOVIMENTO DINÂMICOS
+// =========================================================================
+function fmtNum(v) {
+  if (Number.isInteger(v)) return String(v);
+  return v.toFixed(3).replace(/0+$/,'').replace(/\.$/,'');
+}
+function buildMotionControls() {
+  const preset = state.motionPreset;
+  const wrap = document.getElementById('motionControls');
+  const builtinWrap = document.getElementById('motionBuiltinWrap');
+  const customWrap = document.getElementById('customMotionWrap');
+  wrap.innerHTML = '';
+  if (preset === 'custom') {
+    builtinWrap.style.display = 'none';
+    customWrap.style.display = 'block';
+    return;
+  }
+  customWrap.style.display = 'none';
+  const schema = MOTION_SCHEMAS[preset] || [];
+  if (!schema.length) { builtinWrap.style.display = 'none'; return; }
+  builtinWrap.style.display = 'block';
+  schema.forEach(field => {
+    const v = motionState[field.key] ?? field.def;
+    motionState[field.key] = v;
+    const d = document.createElement('div');
+    d.className = 'field';
+    d.innerHTML = `<label>${field.label} = <span class="val">${fmtNum(v)}</span></label>
+      <input type="range" min="${field.min}" max="${field.max}" step="${field.step}" value="${v}">`;
+    wrap.appendChild(d);
+    const slider = d.querySelector('input');
+    const lbl = d.querySelector('.val');
+    slider.addEventListener('input', e => {
+      const val = parseFloat(e.target.value);
+      motionState[field.key] = val;
+      lbl.textContent = fmtNum(val);
+    });
+  });
+}
+
+// =========================================================================
+//  WIRING
+// =========================================================================
+function bindSlider(id, key, labelId, parser, onChange) {
+  const el = document.getElementById(id);
+  const lbl = labelId ? document.getElementById(labelId) : null;
+  if (!el) return;
+  el.addEventListener('input', e => {
+    const v = parser ? parser(e.target.value) : parseFloat(e.target.value);
+    state[key] = v;
+    if (lbl) lbl.textContent = (typeof v === 'number' && !Number.isInteger(v)) ? v.toFixed(3) : v;
+    updateDerivedInfo();
+    if (onChange) onChange(v);
+    if (uiState === UI.SETUP) render();
+  });
+}
+function bindCheck(id, key, onChange) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('change', e => {
+    state[key] = e.target.checked;
+    if (onChange) onChange(e.target.checked);
+  });
+}
+function bindSelect(id, key, onChange) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('change', e => {
+    state[key] = e.target.value;
+    if (onChange) onChange(e.target.value);
+  });
+}
+
+function setupUI() {
+  bindSlider('sldW', 'W', 'lblW');
+  bindSlider('sldH', 'H', 'lblH');
+  bindSlider('sldNx', 'nx', 'lblNx', v => parseInt(v));
+  bindSlider('sldNy', 'ny', 'lblNy', v => parseInt(v));
+  bindSlider('sldXc', 'xc', 'lblXc');
+  bindSlider('sldYc', 'yc', 'lblYc');
+  bindSlider('sldC', 'c', 'lblC');
+  bindSlider('sldCfl', 'cfl', 'lblCfl');
+  bindSlider('sldSpf', 'stepsPerFrame', 'lblSpf', v => parseInt(v));
+  bindSlider('sldAW', 'absorbWidth', 'lblAW');
+  bindSlider('sldAS', 'absorbStrength', 'lblAS', v => parseFloat(v));
+  bindSlider('sldTheta0', 'theta0', 'lblTheta0');
+  bindSlider('sldOpening', 'opening', 'lblOpening');
+  bindSlider('sldInitAmp', 'initAmp', 'lblInitAmp');
+  bindSlider('sldInitWidth', 'initWidth', 'lblInitWidth');
+  bindSlider('sldNP', 'numParticles', 'lblNP', v => parseInt(v));
+  bindSlider('sldPW', 'pulseWidth', 'lblPW');
+  bindSlider('sldMass', 'mass', 'lblMass');
+  bindSlider('sldCharge', 'charge', 'lblCharge');
+  bindSlider('sldDcx', 'distCx', 'lblDcx');
+  bindSlider('sldDcy', 'distCy', 'lblDcy');
+  bindSlider('sldDlen', 'distLen', 'lblDlen');
+  bindSlider('sldDang', 'distAng', 'lblDang');
+  bindSlider('sldDprop', 'distProp', 'lblDprop');
+  bindSlider('sldVmin', 'vmin', 'lblVmin', v => parseFloat(v), () => {
+    state.vAuto = false; document.getElementById('chkVauto').checked = false;
+  });
+  bindSlider('sldVmax', 'vmax', 'lblVmax', v => parseFloat(v), () => {
+    state.vAuto = false; document.getElementById('chkVauto').checked = false;
+  });
+  bindSlider('sldCF', 'colorFactor', 'lblCF');
+
+  bindSelect('selSigmaType', 'sigmaType', v => {
+    document.getElementById('sigmaExtraWrap').style.display =
+      (v === 'circular' || v === 'open') ? 'block' : 'none';
+    if (uiState === UI.SETUP) render();
+  });
+  bindSelect('selInitType', 'initType', v => {
+    document.getElementById('initGaussWrap').style.display = v === 'gaussian' ? 'block' : 'none';
+    document.getElementById('initExprWrap').style.display = v === 'expression' ? 'block' : 'none';
+    if (uiState === UI.SETUP) render();
+  });
+  bindSelect('selDistType', 'distType', () => { if (uiState === UI.SETUP) render(); });
+  bindSelect('selMotionPreset', 'motionPreset', () => buildMotionControls());
+  bindSelect('selColorMap', 'colorMap', () => { buildColorLUT(); if (uiState === UI.SETUP) render(); });
+
+  document.querySelectorAll('input[name="showField"]').forEach(r => {
+    r.addEventListener('change', e => { state.showField = e.target.value; if (uiState === UI.SETUP) render(); });
+  });
+  document.querySelectorAll('input[name="motionMode"]').forEach(r => {
+    r.addEventListener('change', e => { state.motionMode = e.target.value; });
+  });
+
+  bindCheck('chkConjugate', 'conjugate');
+  bindCheck('chkPreventSuperluminal', 'preventSuperluminal');
+  bindCheck('chkVauto', 'vAuto', () => { if (uiState === UI.SETUP) render(); });
+  bindCheck('chkShowParticles', 'showParticles', () => { if (uiState === UI.SETUP) render(); });
+  bindCheck('chkShowAxes', 'showAxes', () => { if (uiState === UI.SETUP) render(); });
+  bindCheck('chkShowGrid', 'showGrid', () => { if (uiState === UI.SETUP) render(); });
+  bindCheck('chkExtSource', 'useExtSource', v => {
+    document.getElementById('extSourceWrap').style.display = v ? 'block' : 'none';
+  });
+  bindCheck('chkInteractive', 'interactive', v => {
+    updateUIForState();
+    cv.style.cursor = v && uiState !== UI.SETUP ? 'grab' : 'default';
+  });
+
+  const bindText = (id, key) => {
+    document.getElementById(id).addEventListener('change', e => { state[key] = e.target.value; });
+  };
+  bindText('txtInitExpr', 'initExpr');
+  bindText('txtForceExpr', 'forceExpr');
+  bindText('txtMotionX', 'motionX');
+  bindText('txtMotionY', 'motionY');
+  bindText('txtMotionZ', 'motionZ');
+
+  document.getElementById('btnStart').addEventListener('click', startSimulation);
+  document.getElementById('btnPause').addEventListener('click', pauseSimulation);
+  document.getElementById('btnStop').addEventListener('click', stopSimulation);
+  document.getElementById('btnViewFit').addEventListener('click', function() {
+    viewMode = 'fit';
+    this.classList.add('active');
+    document.getElementById('btnViewCrop').classList.remove('active');
+    resizeCanvas();
+  });
+  document.getElementById('btnViewCrop').addEventListener('click', function() {
+    viewMode = 'crop';
+    this.classList.add('active');
+    document.getElementById('btnViewFit').classList.remove('active');
+    resizeCanvas();
+  });
+  document.getElementById('btnReset').addEventListener('click', resetDefaults);
+  document.getElementById('btnAddParticle').addEventListener('click', () => {
+    pendingCreateMode = true; pendingRemoveMode = false;
+    document.getElementById('btnAddParticle').classList.add('active');
+    document.getElementById('btnRemoveParticle').classList.remove('active');
+    document.getElementById('modeHint').classList.add('active');
+  });
+  document.getElementById('btnRemoveParticle').addEventListener('click', () => {
+    pendingRemoveMode = true; pendingCreateMode = false;
+    document.getElementById('btnRemoveParticle').classList.add('active');
+    document.getElementById('btnAddParticle').classList.remove('active');
+    document.getElementById('modeHint').classList.add('active');
+  });
+
+  cv.addEventListener('mousedown', handlePointerDown);
+  window.addEventListener('mousemove', handlePointerMove);
+  window.addEventListener('mouseup', handlePointerUp);
+  cv.addEventListener('touchstart', e => handlePointerDown(e.touches[0]), {passive:false});
+  window.addEventListener('touchmove', e => handlePointerMove(e.touches[0]), {passive:false});
+  window.addEventListener('touchend', handlePointerUp);
+
+  document.querySelectorAll('.collapsible-header').forEach(h => {
+    h.addEventListener('click', () => {
+      h.querySelector('.collapsible-toggle').classList.toggle('open');
+      h.nextElementSibling.classList.toggle('open');
+    });
+  });
+
+  updateDerivedInfo();
+  buildMotionControls();
+  updateUIForState();
+}
+
+function resetDefaults() {
+  Object.assign(state, {
+    W: 1, H: 1, nx: 300, ny: 300, xc: 0, yc: 0,
+    c: 1, cfl: 0.5, stepsPerFrame: 1,
+    sigmaType: 'circular', absorbWidth: 0.25, absorbStrength: 200,
+    theta0: Math.PI, opening: Math.PI/8,
+    initType: 'zero', initAmp: 1, initWidth: 0.1, initExpr: '0',
+    useExtSource: false, forceExpr: '0',
+    numParticles: 20, mass: 0.01, charge: 0.01, conjugate: false,
+    pulseWidth: 0.02, preventSuperluminal: true, speedCap: 0.99,
+    distType: 'ring', distCx: 0, distCy: 0, distLen: 0.1, distAng: 0, distProp: 1,
+    motionPreset: 'x-wave', motionMode: 'offset',
+    motionX: '0', motionY: '0', motionZ: '0',
+    colorMap: 'RdBu_r', vmin: -1, vmax: 1, vAuto: true, colorFactor: 1.125,
+    showField: 'total', showParticles: true, showAxes: true, showGrid: false,
+    interactive: false
+  });
+  resetMotionState();
+  document.getElementById('sldW').value = 1; document.getElementById('lblW').textContent = '1';
+  document.getElementById('sldH').value = 1; document.getElementById('lblH').textContent = '1';
+  document.getElementById('sldNx').value = 300; document.getElementById('lblNx').textContent = '300';
+  document.getElementById('sldNy').value = 300; document.getElementById('lblNy').textContent = '300';
+  document.getElementById('sldXc').value = 0; document.getElementById('lblXc').textContent = '0';
+  document.getElementById('sldYc').value = 0; document.getElementById('lblYc').textContent = '0';
+  document.getElementById('sldC').value = 1; document.getElementById('lblC').textContent = '1.00';
+  document.getElementById('sldCfl').value = 0.5; document.getElementById('lblCfl').textContent = '0.50';
+  document.getElementById('sldSpf').value = 1; document.getElementById('lblSpf').textContent = '1';
+  document.getElementById('selSigmaType').value = 'circular';
+  document.getElementById('sldAW').value = 0.25; document.getElementById('lblAW').textContent = '0.25';
+  document.getElementById('sldAS').value = 200; document.getElementById('lblAS').textContent = '200';
+  document.getElementById('selInitType').value = 'zero';
+  document.getElementById('chkExtSource').checked = false;
+  document.getElementById('txtForceExpr').value = '0';
+  document.getElementById('sldNP').value = 20; document.getElementById('lblNP').textContent = '20';
+  document.getElementById('sldPW').value = 0.02; document.getElementById('lblPW').textContent = '0.02';
+  document.getElementById('sldMass').value = 0.01; document.getElementById('lblMass').textContent = '0.01';
+  document.getElementById('sldCharge').value = 0.01; document.getElementById('lblCharge').textContent = '0.01';
+  document.getElementById('chkConjugate').checked = false;
+  document.getElementById('selDistType').value = 'ring';
+  document.getElementById('sldDlen').value = 0.1; document.getElementById('lblDlen').textContent = '0.1';
+  document.getElementById('selMotionPreset').value = 'x-wave';
+  document.getElementById('selColorMap').value = 'RdBu_r';
+  document.getElementById('chkVauto').checked = true;
+  document.querySelectorAll('input[name="showField"]').forEach(r => { r.checked = r.value === 'total'; });
+  document.getElementById('chkInteractive').checked = false;
+  buildMotionControls();
+  buildColorLUT();
+  updateDerivedInfo();
+  updateUIForState();
+  clearError();
+  stopSimulation();
+}
+
+// =========================================================================
+//  INIT
+// =========================================================================
+setupUI();
+buildColorLUT();
+resizeCanvas();
+ctx.fillStyle = '#000';
+ctx.fillRect(0, 0, cv.width, cv.height);
+</script>
+</body>
+</html>
