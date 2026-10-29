@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Como o simulador de linhas de campo magnético funciona</title>
+<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['\\(','\\)']],
+    displayMath: [['$$','$$']],
+    tags: 'ams'
+  },
+  svg: { fontCache: 'global' }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" async></script>
+<style>
+:root{
+  --bg:#131313; --panel:#171a2a; --card:#353535; --border:#333333;
+  --text:#d8dbef; --muted:#aaaaaa; --accent:#8cd1ff; --accent2:#ff6b6b;
+  --code-bg:#222222; --warn:#ffb454;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  font-size:16px;line-height:1.65}
+a{color:var(--accent2);text-decoration:none}
+a:hover{text-decoration:underline}
+.wrap{max-width:900px;margin:0 auto;padding:48px 24px 96px}
+header.hero{border-bottom:1px solid var(--border);padding-bottom:28px;margin-bottom:36px}
+header.hero h1{margin:0 0 8px;font-size:30px;letter-spacing:-.01em}
+header.hero p{margin:0;color:var(--muted);font-size:15px}
+nav.toc{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:20px 24px;margin-bottom:40px}
+nav.toc h2{margin:0 0 12px;font-size:13px;text-transform:uppercase;
+  letter-spacing:.08em;color:var(--muted)}
+nav.toc ol{margin:0;padding-left:22px}
+nav.toc li{margin:4px 0}
+section{margin:48px 0;scroll-margin-top:20px}
+h2{font-size:24px;margin:0 0 14px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+h3{font-size:18px;margin:28px 0 10px;color:var(--accent)}
+h4{font-size:15px;margin:20px 0 8px;color:var(--accent2)}
+p{margin:10px 0}
+ul,ol{margin:10px 0 10px 24px}
+li{margin:4px 0}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.92em;
+  background:var(--code-bg);border:1px solid var(--border);border-radius:4px;padding:1px 5px}
+pre{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;
+  padding:14px 16px;overflow-x:auto;font-size:13.5px;line-height:1.55}
+pre code{background:none;border:none;padding:0;font-size:inherit}
+.note{background:rgba(107,203,255,.07);border-left:3px solid var(--accent2);
+  padding:10px 14px;border-radius:0 6px 6px 0;margin:14px 0;font-size:14.5px}
+.warn{background:rgba(255,180,84,.07);border-left:3px solid var(--warn);
+  padding:10px 14px;border-radius:0 6px 6px 0;margin:14px 0;font-size:14.5px}
+.math{overflow-x:auto;padding:6px 0}
+mjx-container{color:var(--text) !important}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14.5px}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--border)}
+th{color:var(--muted);font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.05em}
+tr:last-child td{border-bottom:none}
+.step{background:var(--card);border:1px solid var(--border);border-radius:10px;
+  padding:16px 20px;margin:16px 0}
+.step .label{display:inline-block;background:var(--accent);color:#222222;
+  font-weight:700;font-size:12px;padding:2px 9px;border-radius:20px;margin-bottom:8px;
+  letter-spacing:.03em}
+footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--border);
+  color:var(--muted);font-size:13px;text-align:center}
+@media(max-width:700px){.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>Como funciona o simulador de linhas de campo magnético</h1>
+  <p>Documentação conceitual e matemática &mdash; da lei de Biot&ndash;Savart à integração de linhas de campo com RK4.</p>
+</header>
+
+<nav class="toc">
+  <h2>Sumário</h2>
+  <ol>
+    <li><a href="#visao">Visão geral</a></li>
+    <li><a href="#biot">O campo magnético: lei de Biot&ndash;Savart</a></li>
+    <li><a href="#discret">Discretização da curva</a></li>
+    <li><a href="#corrente">Corrente variável ao longo do fio</a></li>
+    <li><a href="#sementes">Sementes: pontos de partida das linhas</a></li>
+    <li><a href="#integra">Integração das linhas de campo (RK4)</a></li>
+    <li><a href="#color">Coloração e escalas</a></li>
+    <li><a href="#multi">Geometrias multi-fio</a></li>
+    <li><a href="#perf">Perfis de performance e preset personalizado</a></li>
+    <li><a href="#arq">Arquitetura e fluxo do programa</a></li>
+    <li><a href="#limites">Limitações e escolhas numéricas</a></li>
+  </ol>
+</nav>
+
+<!-- ============================================================ -->
+<section id="visao">
+<h2>1. Visão geral</h2>
+
+<p>O simulador resolve numericamente o seguinte problema: dada uma <strong>curva fechada ou aberta</strong> percorrida por uma corrente elétrica \(I\), desenhar as <strong>linhas de campo magnético</strong> \(\mathbf{B}\) que ela produz no espaço.</p>
+
+<p>Para isso, quatro etapas se sucedem:</p>
+
+<div class="step">
+  <span class="label">Etapa 1</span>
+  <strong>Discretizar a curva do fio</strong> em pequenos segmentos e calcular, para cada segmento, a contribuição ao campo via lei de Biot&ndash;Savart. Cada segmento carrega a corrente local \(I(t)\) no parâmetro \(t\) daquele trecho.
+</div>
+
+<div class="step">
+  <span class="label">Etapa 2</span>
+  <strong>Escolher sementes</strong>: pontos no espaço de onde as linhas de campo vão partir.
+</div>
+
+<div class="step">
+  <span class="label">Etapa 3</span>
+  <strong>Integrar</strong> a equação diferencial \(\frac{d\mathbf{r}}{ds} = \frac{\mathbf{B}(\mathbf{r})}{\|\mathbf{B}(\mathbf{r})\|}\) a partir de cada semente, produzindo uma polilinha que é a linha de campo.
+</div>
+
+<div class="step">
+  <span class="label">Etapa 4</span>
+  <strong>Colorir</strong> cada ponto da linha pelo valor local \(\|\mathbf{B}\|\), eventualmente transformado por uma escala (linear ou logarítmica).
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="biot">
+<h2>2. O campo magnético: lei de Biot&ndash;Savart</h2>
+
+<p>A lei de Biot&ndash;Savart dá o campo magnético produzido por um elemento infinitesimal de fio \(d\boldsymbol{\ell}\) percorrido por corrente \(I\), num ponto \(\mathbf{r}\):</p>
+
+<div class="math">
+$$d\mathbf{B}(\mathbf{r}) = \frac{\mu_0 I}{4\pi}\,\frac{d\boldsymbol{\ell} \times (\mathbf{r} - \mathbf{r}')}{\|\mathbf{r} - \mathbf{r}'\|^{3}}$$
+</div>
+
+<p>onde \(\mathbf{r}'\) é a posição do elemento de fio, e \(\mathbf{r}\) é o ponto onde se mede o campo. O campo total é a integral ao longo de toda a curva \(\mathcal{C}\):</p>
+
+<div class="math">
+$$\mathbf{B}(\mathbf{r}) = \frac{\mu_0}{4\pi}\oint_{\mathcal{C}} I(\mathbf{r}') \, \frac{d\boldsymbol{\ell} \times (\mathbf{r} - \mathbf{r}')}{\|\mathbf{r} - \mathbf{r}'\|^{3}}$$
+</div>
+
+<p>A corrente \(I\) foi escrita dentro da integral porque o simulador permite corrente <strong>variável ao longo do fio</strong> (detalhes na <a href="#corrente">seção 4</a>).</p>
+
+<h3>Constantes e unidades</h3>
+
+<p>O simulador trabalha em <strong>unidades arbitrárias</strong>: assume \(\mu_0/(4\pi) = 1\). Isso não afeta a geometria das linhas de campo (que só depende da <em>direção</em> de \(\mathbf{B}\)), apenas a escala dos valores de \(\|\mathbf{B}\|\) mostrados na barra de cores. A constante \(1/(4\pi)\) aparece explicitamente no código:</p>
+
+<pre><code>const c = 1/(4*Math.PI);
+out[0] = bx*c; out[1] = by*c; out[2] = bz*c;</code></pre>
+
+<div class="note">
+<strong>Por que a direção basta?</strong> As linhas de campo são as curvas tangentes a \(\mathbf{B}\) em cada ponto. Multiplicar \(\mathbf{B}\) por uma constante positiva não muda as tangentes &mdash; só o parâmetro de comprimento de arco. Por isso a integração normaliza \(\mathbf{B}\) a cada passo.
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="discret">
+<h2>3. Discretização da curva</h2>
+
+<p>Uma curva contínua é aproximada por \(N\) pontos amostrados em \(t \in [t_{\min}, t_{\max}]\):</p>
+
+<div class="math">
+$$\mathbf{r}_i = \bigl(x(t_i),\, y(t_i),\, z(t_i)\bigr), \qquad
+t_i = t_{\min} + (t_{\max} - t_{\min})\,\frac{i}{N-1}, \quad i = 0, \ldots, N-1$$
+</div>
+
+<p>A curva fica dividida em \(N_s = N - 1\) segmentos. Para cada segmento \(i\), o programa guarda:</p>
+
+<table>
+  <tr><th>Símbolo</th><th>Definição</th><th>Significado</th></tr>
+  <tr>
+    <td>\(\mathbf{m}_i\)</td>
+    <td>\(\dfrac{\mathbf{r}_{i+1} + \mathbf{r}_i}{2}\)</td>
+    <td>Ponto médio do segmento</td>
+  </tr>
+  <tr>
+    <td>\(d\boldsymbol{\ell}_i\)</td>
+    <td>\(I(t_i) \, (\mathbf{r}_{i+1} - \mathbf{r}_i)\)</td>
+    <td>Vetor do segmento <em>já multiplicado pela corrente local</em></td>
+  </tr>
+</table>
+
+<p>A integral de Biot&ndash;Savart vira então uma <strong>soma</strong> sobre os segmentos:</p>
+
+<div class="math">
+$$\mathbf{B}(\mathbf{r}) \approx \frac{1}{4\pi}\sum_{i=0}^{N_s-1}
+\frac{d\boldsymbol{\ell}_i \times (\mathbf{r} - \mathbf{m}_i)}
+{\bigl(\|\mathbf{r} - \mathbf{m}_i\|^{2} + \varepsilon\bigr)^{3/2}}$$
+</div>
+
+<p>onde \(\varepsilon = 10^{-8}\) é uma <strong>regularização</strong> que evita divisão por zero quando \(\mathbf{r}\) coincide com um segmento. Sem ela, o campo divergiria numericamente (embora fisicamente um fio ideal tenha campo infinito apenas sobre ele mesmo).</p>
+
+<h3>Implementação (o <em>hot path</em> do programa)</h3>
+
+<p>A função <code>B(x,y,z,out)</code> percorre todos os segmentos e acumula as contribuições. Foi otimizada para não alocar memória a cada chamada:</p>
+
+<pre><code>function B(x, y, z, out) {
+  let bx = 0, by = 0, bz = 0, m = 1e30;
+  for (let i = 0; i &lt; NS; i++) {
+    const j = 3*i;
+    const rx = x - ML[j], ry = y - ML[j+1], rz = z - ML[j+2];  // r - m_i
+    const r2 = rx*rx + ry*ry + rz*rz;
+    if (r2 &lt; m) m = r2;                    // guarda a menor distância (p/ minD)
+    const d = r2 + EPS, f = 1/(d*Math.sqrt(d));  // 1/(|r-m|^2 + eps)^(3/2)
+    const lx = DL[j], ly = DL[j+1], lz = DL[j+2];   // dl_i (já com I(t_i))
+    bx += (ly*rz - lz*ry) * f;             // (dl × r)_x / |r|^3
+    by += (lz*rx - lx*rz) * f;
+    bz += (lx*ry - ly*rx) * f;
+  }
+  minD2 = m;
+  const c = 1/(4*Math.PI);
+  out[0] = bx*c; out[1] = by*c; out[2] = bz*c;
+}</code></pre>
+
+<p>A estrutura de dados é <strong>planar</strong>: <code>ML</code> e <code>DL</code> são <code>Float64Array</code> de comprimento \(3N_s\), guardando \((m_x, m_y, m_z, m_x', m_y', m_z', \ldots)\) contiguamente. Isso melhora a localidade de cache e evita a criação de \(N_s\) objetos.</p>
+
+<div class="note">
+<strong>Custo:</strong> cada chamada a <code>B</code> custa \(O(N_s)\). Como o integrador RK4 chama <code>B</code> quatro vezes por passo, e há \(S\) passos por linha e \(L\) linhas, o custo total é \(O(N_s \cdot S \cdot 4L)\). Para \(N_s = 3200\), \(S = 800\), \(L = 100\), são \(\approx 10^9\) operações &mdash; por isso o programa usa <strong>Web Worker</strong> para não bloquear a UI.
+</div>
+
+<h3>Por que ponto médio?</h3>
+
+<p>A fórmula usa \(\mathbf{m}_i\) (ponto médio) em vez de \(\mathbf{r}_i\) (ponto inicial) porque o erro de aproximação fica <strong>simétrico</strong> em relação ao segmento. É uma regra do ponto médio, com erro \(O(\Delta t^2)\) em vez de \(O(\Delta t)\) &mdash; para a mesma discretização, o campo calculado é mais preciso.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="corrente">
+<h2>4. Corrente variável ao longo do fio</h2>
+
+<p>O campo de entrada <code>I(t)</code> é uma expressão do <strong>parâmetro \(t\) de cada segmento</strong>, e não do tempo global. Isso permite simular fios onde a corrente muda de ponto para ponto &mdash; por exemplo, uma antena de onda estacionária.</p>
+
+<p>Para cada segmento \(i\), o programa avalia:</p>
+
+<div class="math">
+$$I_i = I\!\left(\frac{t_i + t_{i+1}}{2}\right)$$
+</div>
+
+<p>e o vetor de segmento usado na soma já inclui essa corrente:</p>
+
+<div class="math">
+$$d\boldsymbol{\ell}_i = I_i \, (\mathbf{r}_{i+1} - \mathbf{r}_i)$$
+</div>
+
+<p>Assim, o campo resultante é uma soma ponderada &mdash; segmentos com corrente forte contribuem mais; segmentos com corrente fraca (ou nula) contribuem pouco; segmentos com corrente negativa invertem o sentido local.</p>
+
+<h3>Casos comuns</h3>
+
+<table>
+  <tr><th><code>I(t)</code></th><th>Interpretação</th></tr>
+  <tr><td><code>1</code></td><td>Corrente uniforme (caso clássico de Biot&ndash;Savart).</td></tr>
+  <tr><td><code>sin(2*pi*m*t)</code></td><td>Onda estacionária em um fio enrolado com \(m\) voltas.</td></tr>
+  <tr><td><code>1 + 0.5*sin(2*pi*t)</code></td><td>Modulação suave ao longo do fio.</td></tr>
+</table>
+
+<div class="note">
+<strong>No modo multi-fio</strong>, a corrente é atribuída por <em>fração de arco</em> dentro de cada fio: o primeiro fio usa \(I(0)\ldots I(1)\), o segundo também, e assim por diante. Isso preserva a interpretação de que \(I\) é função do parâmetro local de cada fio, não do índice do fio.
+</div>
+
+<p>O fio pode ser colorido pela magnitude \(|I_i|\) usando o mesmo colormap do campo (checkbox "Colorir fio pela intensidade de I"). A normalização usa \(I_{\max} = \max |I_i|\), calculado diretamente dos valores efetivamente atribuídos aos pontos do fio.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="sementes">
+<h2>5. Sementes: pontos de partida das linhas</h2>
+
+<p>As <strong>sementes</strong> são os pontos \(\mathbf{r}_0^{(1)}, \ldots, \mathbf{r}_0^{(L)}\) de onde cada linha de campo começa. A escolha determina quais linhas você verá &mdash; não é única, e diferentes distribuições revelam aspectos diferentes do campo.</p>
+
+<p>O programa oferece quatro tipos:</p>
+
+<h3>5.1 Polar (anéis)</h3>
+<p>Sementes em anéis concêntricos. Dados \(r_{\min}, r_{\max}, z_{\min}, z_{\max}\), o número de raios \(n_r\), o número de níveis em \(z\), \(n_z\), e o número de pontos por anel \(n\):</p>
+
+<div class="math">
+$$r_a = r_{\min} + \frac{a}{n_r - 1}(r_{\max} - r_{\min}), \quad a = 0, \ldots, n_r - 1$$
+$$z_b = z_{\min} + \frac{b}{n_z - 1}(z_{\max} - z_{\min}), \quad b = 0, \ldots, n_z - 1$$
+$$\theta_c = \frac{2\pi c}{n}, \quad c = 0, \ldots, n - 1$$
+$$\mathbf{r}_{abc} = \bigl(r_a\cos\theta_c,\; r_a\sin\theta_c,\; z_b\bigr)$$
+</div>
+
+<p>Total: \(n_r \cdot n_z \cdot n\) sementes. Quando \(n_r = 1\) (ou \(n_z = 1\)), o programa coloca a coordenada no <strong>meio</strong> do intervalo, não no extremo:</p>
+
+<pre><code>const ls = (a, b, k) =&gt; k === 1 ? [(a+b)/2] : Array.from({length: k}, (_, i) =&gt; a + (b-a)*i/(k-1));</code></pre>
+
+<div class="note">
+Essa escolha é importante para o preset padrão: um único raio em \(r_{\min}\) (quase sobre o fio) geraria linhas degeneradas, enquanto no meio do intervalo a linha é representativa.
+</div>
+
+<h3>5.2 Aleatória</h3>
+<p>Distribuição uniforme em raio e ângulo, dentro de um cilindro:</p>
+
+<div class="math">
+$$r = 0.2 + \xi_1\,(R_{\max} - 0.2), \quad
+\theta = 2\pi\xi_2, \quad
+z = z_{\min} + \xi_3\,(z_{\max} - z_{\min})$$
+</div>
+
+<p>onde \(\xi_1, \xi_2, \xi_3 \in [0,1]\) são números pseudoaleatórios determinísticos (gerador <em>mulberry32</em> com semente fixa). A semente fixa garante reprodutibilidade: a mesma configuração sempre produz a mesma imagem.</p>
+
+<h3>5.3 Linha</h3>
+<p>Sementes igualmente espaçadas sobre um segmento \(\mathbf{r}_A \to \mathbf{r}_B\):</p>
+
+<div class="math">
+$$\mathbf{r}_j = \mathbf{r}_A + \frac{j}{n-1}(\mathbf{r}_B - \mathbf{r}_A), \quad j = 0, \ldots, n-1$$
+</div>
+
+<h3>5.4 Grade no plano</h3>
+<p>Grade \(n \times n\) em \(z = z_0\) fixo:</p>
+
+<div class="math">
+$$\mathbf{r}_{ij} = \left(x_{\min} + \frac{i}{n-1}(x_{\max} - x_{\min}),\;
+y_{\min} + \frac{j}{n-1}(y_{\max} - y_{\min}),\; z_0\right)$$
+</div>
+
+<h3>Limite por perfil de performance</h3>
+<p>O número de sementes é limitado por um teto que depende do perfil escolhido:</p>
+
+<table>
+  <tr><th>Perfil</th><th>Teto de sementes</th></tr>
+  <tr><td>Leve</td><td>150</td></tr>
+  <tr><td>Padrão</td><td>400</td></tr>
+  <tr><td>Avançado</td><td>1000</td></tr>
+</table>
+
+<p>Se a distribuição gerar mais sementes que o teto, o programa <strong>subamostra uniformemente</strong> (passo constante no array) em vez de simplesmente truncar no início &mdash; assim a distribuição espacial é preservada.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="integra">
+<h2>6. Integração das linhas de campo (RK4)</h2>
+
+<p>Uma linha de campo é a curva cuja tangente em cada ponto é paralela a \(\mathbf{B}(\mathbf{r})\). Parametrizando pelo comprimento de arco \(s\), isso é:</p>
+
+<div class="math">
+$$\frac{d\mathbf{r}}{ds} = \hat{\mathbf{B}}(\mathbf{r}) \equiv \frac{\mathbf{B}(\mathbf{r})}{\|\mathbf{B}(\mathbf{r})\|}$$
+</div>
+
+<p>A normalização \(\hat{\mathbf{B}}\) garante que \(s\) avance a <strong>uma unidade de comprimento por passo</strong>, e não a um valor que depende de \(\|\mathbf{B}\|\).</p>
+
+<h3>6.1 Runge&ndash;Kutta de 4ª ordem</h3>
+
+<p>Para avançar de \(\mathbf{r}_n\) a \(\mathbf{r}_{n+1}\) com passo \(h\):</p>
+
+<div class="math">
+$$\begin{aligned}
+\mathbf{k}_1 &amp;= \hat{\mathbf{B}}(\mathbf{r}_n) \\
+\mathbf{k}_2 &amp;= \hat{\mathbf{B}}\!\left(\mathbf{r}_n + \tfrac{h}{2}\mathbf{k}_1\right) \\
+\mathbf{k}_3 &amp;= \hat{\mathbf{B}}\!\left(\mathbf{r}_n + \tfrac{h}{2}\mathbf{k}_2\right) \\
+\mathbf{k}_4 &amp;= \hat{\mathbf{B}}\!\left(\mathbf{r}_n + h\,\mathbf{k}_3\right) \\
+\mathbf{r}_{n+1} &amp;= \mathbf{r}_n + \frac{h}{6}\bigl(\mathbf{k}_1 + 2\mathbf{k}_2 + 2\mathbf{k}_3 + \mathbf{k}_4\bigr)
+\end{aligned}$$
+</div>
+
+<p>O erro local é \(O(h^5)\) e o global \(O(h^4)\) &mdash; com apenas 4 avaliações de \(\mathbf{B}\) por passo.</p>
+
+<h3>6.2 Passo adaptativo</h3>
+
+<p>O passo \(h_n\) se ajusta em três situações:</p>
+
+<ol>
+  <li><strong>Perto do fio</strong> (se o passo proposto cairia a menos de \(d_{\min}\) do fio): o passo é <strong>rejeitado</strong> e \(h\) é reduzido pela metade; o programa tenta de novo a partir do ponto anterior. Isso é o <em>backtracking</em>.</li>
+  <li><strong>Longe do fio</strong> (\(\min Dist^2 > 4\,d_{\min}^2\)) e ainda com passo pequeno: \(h\) cresce em 25%, até o limite \(h_{\text{user}}\).</li>
+  <li><strong>Variação brusca de \(\|\mathbf{B}\|\)</strong>: \(h\) cresce se \(\|\mathbf{B}_{n+1}\|/\|\mathbf{B}_n\| > 2\) e \(h_n < 2h_{\text{user}}\); encolhe se a razão for menor que \(0.5\) e \(h_n > h_{\text{user}}/4\).</li>
+</ol>
+
+<div class="math">
+$$d_{\min} = \max\bigl(d_{\min}^{\text{user}},\; 0.3\,\overline{\Delta\ell}\bigr)$$
+</div>
+
+<p>onde \(\overline{\Delta\ell}\) é o comprimento médio dos segmentos do fio. Isso evita que o RK4 pule por cima de um segmento em fios com poucos pontos.</p>
+
+<h3>6.3 Critérios de parada</h3>
+
+<p>Uma integração termina quando uma das condições ocorre:</p>
+
+<table>
+  <tr><th>Condição</th><th>Razão</th></tr>
+  <tr><td>Passos \(\geq S_{\max}\)</td><td>Limite de passos do usuário</td></tr>
+  <tr><td>\(\|\mathbf{r}_{n+1}\| &gt; R_{\max}\)</td><td>Saiu da região de interesse</td></tr>
+  <tr><td>\(\|\mathbf{B}\| &lt; 10^{-14}\)</td><td>Ponto de equilíbrio (campo nulo)</td></tr>
+  <tr><td>\(\|\mathbf{r}_{n+1} - \mathbf{r}_0\| &lt; 0.9h\) após \(n&gt;8\)</td><td>Linha fechou (voltou ao início)</td></tr>
+</table>
+
+<p>O critério de fechamento é heurístico: se o ponto atual está a menos de um passo do ponto inicial, a linha é considerada fechada e completada com o próprio \(\mathbf{r}_0\) para que o plot feche visualmente.</p>
+
+<h3>6.4 Sentido de integração</h3>
+
+<p>O campo é <strong>um campo vetorial</strong>: em cada ponto há uma direção e um sentido. O simulador permite integrar:</p>
+
+<ul>
+  <li><strong>Frente</strong> (\(\sigma = +1\)): segue \(\hat{\mathbf{B}}\);</li>
+  <li><strong>Trás</strong> (\(\sigma = -1\)): segue \(-\hat{\mathbf{B}}\);</li>
+  <li><strong>Ambas</strong>: integra nos dois sentidos e concatena as duas polilinhas.</li>
+</ul>
+
+<p>Para integração bidirecional, a linha final é:</p>
+
+<div class="math">
+$$\{\mathbf{r}_{-K}, \ldots, \mathbf{r}_{-1}, \mathbf{r}_0, \mathbf{r}_{1}, \ldots, \mathbf{r}_{M}\}$$
+</div>
+
+<p>onde o ramo negativo é revertido antes de concatenar, para que a curva fique na ordem geométrica correta.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="color">
+<h2>7. Coloração e escalas</h2>
+
+<p>Cada ponto \(\mathbf{r}_n\) da linha tem um valor de \(\|\mathbf{B}(\mathbf{r}_n)\|\) associado (já incluindo a corrente local dos segmentos). Esse valor é usado para colorir a linha através de um <em>colormap</em>.</p>
+
+<h3>7.1 Normalização por percentil</h3>
+
+<p>Como \(\|\mathbf{B}\|\) varia por muitas ordens de grandeza, o programa <strong>clipa</strong> no percentil 95 dos valores:</p>
+
+<div class="math">
+$$\|\mathbf{B}\|_{\text{ref}} = \text{percentil}_{95}\bigl\{\|\mathbf{B}(\mathbf{r}_n)\|\bigr\}$$
+</div>
+
+<p>e define o colormap sobre \([0, \|\mathbf{B}\|_{\text{ref}}]\). Valores acima aparecem na cor máxima. Isso evita que pontos muito próximos ao fio "queimem" toda a escala.</p>
+
+<h3>7.2 Escala linear ou logarítmica</h3>
+
+<p>O usuário pode escolher entre duas escalas de cor:</p>
+
+<table>
+  <tr><th>Escala</th><th>Transformação aplicada a \(\|\mathbf{B}\|\)</th></tr>
+  <tr><td>Linear</td><td>\(\|\mathbf{B}\|\) direto.</td></tr>
+  <tr><td>Log(1+&#124;B&#124;)</td><td>\(\log(1 + \|\mathbf{B}\|)\).</td></tr>
+</table>
+
+<p>A escala \(\log(1+x)\) é particularmente útil porque:</p>
+
+<ul>
+  <li>Perto do fio, comporta-se como \(\log\|\mathbf{B}\|\), comprimindo a faixa alta e revelando gradientes onde a escala linear satura.</li>
+  <li>Longe do fio, comporta-se como \(\|\mathbf{B}\|\) (já que \(\log(1+x) \approx x\) para \(x \ll 1\)), preservando a leitura de magnitudes pequenas.</li>
+  <li>É <strong>suave em zero</strong>: \(\log(1+0) = 0\), sem o "penhasco" numérico que \(\log(x)\) produziria perto de pontos de campo nulo.</li>
+</ul>
+
+<p>A colorbar exibe ticks em valores <strong>reais</strong> de \(\|\mathbf{B}\|\), espaçados geometricamente no domínio de \(\|\mathbf{B}\|\) (não no espaço transformado), com a posição visual correspondendo ao valor \(\log(1+\|\mathbf{B}\|)\). Assim o usuário lê o valor físico correto sem precisar desfazer a transformação mentalmente.</p>
+
+<h3>7.3 Troca de escala sem refazer a física</h3>
+
+<p>Como a <strong>geometria</strong> das linhas não depende da escala de cor, trocar de linear para logarítmica <strong>não recalcula a integração</strong>: apenas reescala as cores via <code>Plotly.restyle</code>:</p>
+
+<pre><code>function recolorOnly() {
+  // Recalcula cmax, ticks, título da colorbar e cores.
+  // Não toca em ML, DL, base.X, base.Y, base.Z.
+}</code></pre>
+
+<p>O mesmo vale para a animação: como a geometria é fixa, o programa só reescala as cores a ~30 fps.</p>
+
+<div class="warn">
+<strong>Observação:</strong> como \(I(t)\) pode ser negativa, o campo aponta no sentido oposto em alguns trechos. As linhas de campo como <em>conjuntos</em> continuam as mesmas, mas a orientação local inverte. A coloração usa \(\|\mathbf{B}\|\) (magnitude), então a cor não distingue sentido.
+</div>
+
+<h3>7.4 Fio colorido por \(I\)</h3>
+
+<p>O fio pode ser colorido pela magnitude \(|I_i|\) de cada ponto, usando o mesmo colormap. A normalização usa \(I_{\max} = \max |I_i|\), calculado diretamente dos valores atribuídos aos pontos do fio.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="multi">
+<h2>8. Geometrias multi-fio</h2>
+
+<p>Alguns presets (linhas paralelas, anéis paralelos, anéis concêntricos) geram <strong>múltiplos fios desconexos</strong>. Eles não são parametrizados por uma única expressão \(x(t), y(t), z(t)\) contínua &mdash; isso introduziria segmentos de salto espúrios na integral de Biot&ndash;Savart.</p>
+
+<p>Em vez disso, a função <code>buildMulti</code> gera \(M\) curvas independentes:</p>
+
+<div class="math">
+$$\mathcal{C} = \mathcal{C}_1 \cup \mathcal{C}_2 \cup \cdots \cup \mathcal{C}_M$$
+</div>
+
+<p>Como a integral de Biot&ndash;Savart é linear na curva, somar as contribuições dos \(M\) fios é exatamente o mesmo que integrar sobre \(\mathcal{C}\):</p>
+
+<div class="math">
+$$\mathbf{B}(\mathbf{r}) = \sum_{k=1}^{M} \mathbf{B}_{\mathcal{C}_k}(\mathbf{r})$$
+</div>
+
+<p>Na renderização, o Plotly recebe as \(M\) polilinhas separadas por <code>null</code> (quebra visual), mas <code>ML</code>/<code>DL</code> contêm todos os segmentos contíguos para o cálculo do campo.</p>
+
+<h3>Convenções dos presets</h3>
+
+<table>
+  <tr><th>Preset</th><th>Parâmetros</th><th>Geometria</th></tr>
+  <tr>
+    <td>Linhas paralelas</td>
+    <td>\(M\), \(L\), \(a\)</td>
+    <td>\(x_k = (k - \frac{M-1}{2})a\), \(y \in [-L/2, L/2]\), \(z = 0\)</td>
+  </tr>
+  <tr>
+    <td>Anéis paralelos</td>
+    <td>\(M\), \(R\), \(a\)</td>
+    <td>raio \(R\), \(z_k = (k - \frac{M-1}{2})a\), plano \(xy\)</td>
+  </tr>
+  <tr>
+    <td>Anéis concêntricos</td>
+    <td>\(M\), \(R_0\), \(a\)</td>
+    <td>raio \(R_k = R_0 + ka\), plano \(z=0\)</td>
+  </tr>
+</table>
+
+<p>Em todos, \(M\) é forçado a inteiro maior ou igual a 1.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="perf">
+<h2>9. Perfis de performance e preset personalizado</h2>
+
+<h3>9.1 Perfis</h3>
+
+<p>O seletor de performance multiplica ou divide parâmetros-chave para adaptar o custo ao dispositivo:</p>
+
+<table>
+  <tr><th>Parâmetro</th><th>Leve</th><th>Padrão</th><th>Avançado</th></tr>
+  <tr><td>Pontos da curva (\(N\))</td><td>0.5×</td><td>1×</td><td>2×</td></tr>
+  <tr><td>Sementes</td><td>0.35×</td><td>1×</td><td>2×</td></tr>
+  <tr><td>Passos máx. (\(S\))</td><td>300</td><td>800</td><td>1500</td></tr>
+  <tr><td>Passo (\(h\))</td><td>0.06</td><td>0.04</td><td>0.025</td></tr>
+  <tr><td>Teto de sementes</td><td>150</td><td>400</td><td>1000</td></tr>
+  <tr><td>Orçamento</td><td>3×10⁷</td><td>6×10⁷</td><td>2.4×10⁸</td></tr>
+</table>
+
+<p>Ao trocar de perfil, os valores padrão do preset são recarregados (a menos que o preset seja <em>Personalizado</em>).</p>
+
+<h3>9.2 Preset Personalizado</h3>
+
+<p>O preset <em>Personalizado</em> permite escrever \(x(t), y(t), z(t)\) livremente. As variáveis detectadas viram sliders. O estado é salvo em <code>localStorage</code> e restaurado ao reabrir a página. Os presets originais não são alterados.</p>
+
+<p>Ao selecionar <em>Personalizado</em>, o programa:</p>
+<ol>
+  <li>Tenta carregar o estado salvo em <code>localStorage</code>.</li>
+  <li>Se não houver estado salvo, copia o preset anterior (se não for multi-fio) como ponto de partida.</li>
+  <li>Restaura expressões, parâmetros, tipo de semente e valores de semente.</li>
+</ol>
+
+<p>Qualquer alteração em campos de expressão, parâmetros, sementes ou integração salva o estado automaticamente.</p>
+
+<h3>9.3 Detecção de parâmetros</h3>
+
+<p>As variáveis livres são detectadas via AST do <code>math.js</code>, ignorando:</p>
+
+<ul>
+  <li>constantes conhecidas (\(t, s, \pi, e, \tau, \ldots\));</li>
+  <li>funções nativas do math.js (para não criar sliders para \(\sin\), \(\cos\), etc.);</li>
+  <li>variáveis atribuídas nas "Definições auxiliares".</li>
+</ul>
+
+<p>A filtragem é feita com:</p>
+
+<pre><code>if (x.isSymbolNode
+    &amp;&amp; !SKIP.has(x.name)
+    &amp;&amp; typeof math[x.name] !== 'function'
+    &amp;&amp; !as.has(x.name)) { /* é parâmetro */ }</code></pre>
+</section>
+
+<!-- ============================================================ -->
+<section id="arq">
+<h2>10. Arquitetura e fluxo do programa</h2>
+
+<p>O programa é uma única página HTML com JavaScript inline. O fluxo de uma execução (<code>run()</code>) é:</p>
+
+<div class="step">
+  <span class="label">1</span>
+  <strong>Compilar as expressões</strong> \(x(t), y(t), z(t)\) e \(I(t)\) com <code>math.js</code>. As compilações são cacheadas por string (até 80 entradas).
+</div>
+
+<div class="step">
+  <span class="label">2</span>
+  <strong>Amostrar a curva</strong> em \(N\) pontos, calcular <code>ML</code>, <code>DL</code> e atribuir a corrente local \(I_i\) a cada segmento.
+</div>
+
+<div class="step">
+  <span class="label">3</span>
+  <strong>Gerar as sementes</strong> de acordo com a distribuição escolhida e o teto do perfil.
+</div>
+
+<div class="step">
+  <span class="label">4</span>
+  <strong>Integrar cada linha</strong> com RK4 + backtracking. Isso é feito em um <strong>Web Worker</strong> quando disponível, para não bloquear a UI.
+</div>
+
+<div class="step">
+  <span class="label">5</span>
+  <strong>Renderizar</strong> com <code>Plotly.react</code>, preservando a câmera 3D via <code>uirevision</code> e restauração explícita da câmera anterior.
+</div>
+
+<h3>Worker: por que existe</h3>
+
+<p>A integração é \(O(N_s \cdot S \cdot 4L)\). O Worker roda em thread separada, recebendo <code>ML</code>/<code>DL</code> como <code>ArrayBuffer</code>. Como o programa principal ainda precisa desses buffers para renderizar, ele envia <strong>cópias</strong> (<code>slice(0)</code>) &mdash; a transferência zero-copy não é usada aqui porque o mesmo buffer precisa ser lido depois pela thread principal.</p>
+
+<pre><code>const mlc = ML.buffer.slice(0);
+const dlc = DL.buffer.slice(0);
+w.postMessage({ ML: mlc, DL: dlc, NS, seeds, ... }, [mlc, dlc]);</code></pre>
+
+<p>Ao terminar, o Worker devolve <code>{res, traced}</code>, e o programa principal monta os traces do Plotly. O Worker é terminado e seu blob URL revogado imediatamente após o uso &mdash; evitando vazamento de memória em execuções repetidas.</p>
+
+<h3>Cache de compilação</h3>
+
+<pre><code>const compileCache = new Map();
+function getCompiled(text) {
+  if (compileCache.has(text)) return compileCache.get(text);
+  const c = math.parse(text).compile();
+  compileCache.set(text, c);
+  while (compileCache.size &gt; 80) {
+    compileCache.delete(compileCache.keys().next().value);
+  }
+  return c;
+}</code></pre>
+
+<p>É um cache FIFO de tamanho fixo &mdash; nunca cresce além de 80 entradas.</p>
+
+<h3>Preservação da câmera 3D</h3>
+
+<p>Em Plotly 3D, re-renderizar enquanto o usuário arrasta a cena pode travar o controle de órbita. O programa adota três defesas:</p>
+
+<ol>
+  <li><strong>Lock de interação</strong>: eventos de mouse/touch no canvas 3D marcam <code>interacting=true</code>, e <code>run()</code> é adiado até o fim da interação.</li>
+  <li><strong>Captura de câmera</strong>: antes do <code>react</code>, a câmera atual é lida de <code>gd._fullLayout.scene.camera</code> e passada de volta.</li>
+  <li><strong><code>uirevision</code> sensível à estrutura</strong>: o valor é <code>"k-"+N+"-"+NS+"-"+bg</code>. Mudanças estruturais resetam a câmera de forma limpa; mudanças só de corrente ou cor preservam a órbita.</li>
+</ol>
+</section>
+
+<!-- ============================================================ -->
+<section id="limites">
+<h2>11. Limitações e escolhas numéricas</h2>
+
+<h3>11.1 Erro de discretização da curva</h3>
+<p>A integral de Biot&ndash;Savart é aproximada por uma soma de Riemann com regra do ponto médio. O erro é \(O(\Delta t^2)\). Aumentar \(N\) melhora a precisão, com custo linear em \(N_s\) por avaliação de \(\mathbf{B}\).</p>
+
+<h3>11.2 Regularização \(\varepsilon = 10^{-8}\)</h3>
+<p>Perto do fio, o denominador \((\|\mathbf{r} - \mathbf{m}_i\|^2 + 10^{-8})^{3/2}\) impede divisão por zero, mas distorce o campo quando \(\|\mathbf{r} - \mathbf{m}_i\|\) é menor que \(10^{-4}\). O parâmetro <code>minD</code> evita que a integração chegue tão perto.</p>
+
+<h3>11.3 Normalização \(\hat{\mathbf{B}}\)</h3>
+<p>A integração por comprimento de arco funciona bem onde \(\|\mathbf{B}\|\) não é nulo. Em pontos de equilíbrio, a direção é indefinida; o programa corta a linha quando \(\|\mathbf{B}\| &lt; 10^{-14}\).</p>
+
+<h3>11.4 Critério de fechamento</h3>
+<p>A heurística "distância ao início menor que \(0.9h\)" pode falhar em campos com múltiplas escalas. Para linhas que não fecham, o programa corta em \(S_{\max}\) passos ou \(R_{\max}\).</p>
+
+<h3>11.5 Custo computacional</h3>
+<p>O programa impõe um <strong>orçamento</strong> que depende do perfil (3×10⁷, 6×10⁷ ou 2.4×10⁸ operações por execução). Se \(N_s \cdot S \cdot L\) excede esse valor, os <code>steps</code> são reduzidos automaticamente:</p>
+
+<div class="math">
+$$S \leftarrow \max\!\left(20,\; \left\lfloor S \cdot \sqrt{\frac{\text{orçamento}}{N_s \cdot S \cdot L}} \right\rfloor \right)$$
+</div>
+
+<p>e o aviso "passos=\(S\)" aparece ao lado das estatísticas.</p>
+
+<h3>11.6 Física simplificada</h3>
+<ul>
+  <li>\(\mu_0/(4\pi) = 1\) (unidades arbitrárias).</li>
+  <li>Corrente \(I(t)\) avaliada no parâmetro local de cada segmento (não no tempo global).</li>
+  <li>Fios infinitamente finos (sem raio físico).</li>
+  <li>Sem meios materiais (\(\mu_r = 1\)), sem campos elétricos variáveis.</li>
+  <li>Sem relatividade: correntes estacionárias ou quase-estacionárias.</li>
+</ul>
+
+<div class="note">
+Dentro dessas aproximações, o simulador resolve exatamente o problema de Biot&ndash;Savart com a precisão da discretização e do integrador escolhidos.
+</div>
+</section>
+
+<footer>
+<a href="https://github.com/MPC10N3K/Sim-Eletromagnetismo" target="_blank" rel="noopener">GitHub</a>
+</footer>
+
+</div>
+</body>
+</html>
