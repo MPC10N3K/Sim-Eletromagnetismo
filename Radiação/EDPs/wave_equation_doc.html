@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Como funciona o simulador de equação da onda</title>
+<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['\\(','\\)']],
+    displayMath: [['$$','$$']],
+    tags: 'ams'
+  },
+  svg: { fontCache: 'global' }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" async></script>
+<style>
+:root{
+  --bg:#131313; --panel:#171a2a; --card:#353535; --border:#333333;
+  --text:#d8dbef; --muted:#aaaaaa; --accent:#8cd1ff; --accent2:#ff6b6b;
+  --code-bg:#222222; --warn:#ffb454;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  font-size:16px;line-height:1.65}
+a{color:var(--accent2);text-decoration:none}
+a:hover{text-decoration:underline}
+.wrap{max-width:900px;margin:0 auto;padding:48px 24px 96px}
+header.hero{border-bottom:1px solid var(--border);padding-bottom:28px;margin-bottom:36px}
+header.hero h1{margin:0 0 8px;font-size:30px;letter-spacing:-.01em}
+header.hero p{margin:0;color:var(--muted);font-size:15px}
+nav.toc{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:20px 24px;margin-bottom:40px}
+nav.toc h2{margin:0 0 12px;font-size:13px;text-transform:uppercase;
+  letter-spacing:.08em;color:var(--muted)}
+nav.toc ol{margin:0;padding-left:22px}
+nav.toc li{margin:4px 0}
+section{margin:48px 0;scroll-margin-top:20px}
+h2{font-size:24px;margin:0 0 14px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+h3{font-size:18px;margin:28px 0 10px;color:var(--accent)}
+h4{font-size:15px;margin:20px 0 8px;color:var(--accent2)}
+p{margin:10px 0}
+ul,ol{margin:10px 0 10px 24px}
+li{margin:4px 0}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.92em;
+  background:var(--code-bg);border:1px solid var(--border);border-radius:4px;padding:1px 5px}
+pre{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;
+  padding:14px 16px;overflow-x:auto;font-size:13.5px;line-height:1.55}
+pre code{background:none;border:none;padding:0;font-size:inherit}
+.note{background:rgba(140,209,255,.07);border-left:3px solid var(--accent);
+  padding:10px 14px;border-radius:0 6px 6px 0;margin:14px 0;font-size:14.5px}
+.warn{background:rgba(255,180,84,.07);border-left:3px solid var(--warn);
+  padding:10px 14px;border-radius:0 6px 6px 0;margin:14px 0;font-size:14.5px}
+.math{overflow-x:auto;padding:6px 0}
+mjx-container{color:var(--text) !important}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14.5px}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--border)}
+th{color:var(--muted);font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.05em}
+tr:last-child td{border-bottom:none}
+.step{background:var(--card);border:1px solid var(--border);border-radius:10px;
+  padding:16px 20px;margin:16px 0}
+.step .label{display:inline-block;background:var(--accent);color:#131313;
+  font-weight:700;font-size:12px;padding:2px 9px;border-radius:20px;margin-bottom:8px;
+  letter-spacing:.03em}
+footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--border);
+  color:var(--muted);font-size:13px;text-align:center}
+@media(max-width:700px){.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>Como funciona o simulador de equação da onda</h1>
+  <p>Documentação conceitual e matemática &mdash; da equação de onda escalar 2D ao esquema de diferenças finitas de 9 pontos, passando por fontes, fronteiras absorventes e acoplamento partícula-campo.</p>
+</header>
+
+<nav class="toc">
+  <h2>Sumário</h2>
+  <ol>
+    <li><a href="#visao">Visão geral</a></li>
+    <li><a href="#equacao">A equação de onda 2D</a></li>
+    <li><a href="#discret">Discretização: esquema de 9 pontos</a></li>
+    <li><a href="#cfl">Estabilidade e condição CFL</a></li>
+    <li><a href="#fonte">Fontes: condição inicial e fonte externa</a></li>
+    <li><a href="#absorcao">Fronteiras absorventes (camada σ)</a></li>
+    <li><a href="#particulas">Partículas acopladas ao campo</a></li>
+    <li><a href="#movimento">Movimento das partículas</a></li>
+    <li><a href="#interativo">Modo interativo</a></li>
+    <li><a href="#render">Renderização e colormaps</a></li>
+    <li><a href="#arq">Arquitetura e fluxo do programa</a></li>
+    <li><a href="#limites">Limitações e escolhas numéricas</a></li>
+  </ol>
+</nav>
+
+<!-- ============================================================ -->
+<section id="visao">
+<h2>1. Visão geral</h2>
+
+<p>O simulador resolve numericamente a <strong>equação de onda escalar 2D</strong>:</p>
+
+<div class="math">
+$$\frac{\partial^2 Z}{\partial t^2} = c^2 \nabla^2 Z + f(\mathbf{r}, t)$$
+</div>
+
+<p>onde \(Z(\mathbf{r}, t)\) é o campo (por exemplo, deslocamento de uma membrana ou pressão acústica), \(c\) é a velocidade de propagação e \(f(\mathbf{r}, t)\) é uma fonte externa.</p>
+
+<p>Além disso, o programa permite acoplar <strong>partículas móveis</strong> que atuam como fontes em movimento &mdash; cada partícula contribui com uma gaussiana centrada na sua posição, e o movimento pode ser prescrito (onda, órbita, aceleração) ou determinado pela interação com o campo.</p>
+
+<p>O fluxo de uma simulação é:</p>
+
+<div class="step">
+  <span class="label">1</span>
+  <strong>Inicializar</strong> a grade, a condição inicial \(Z(\mathbf{r}, 0)\) e as partículas.
+</div>
+
+<div class="step">
+  <span class="label">2</span>
+  <strong>A cada passo</strong>: atualizar as posições das partículas, calcular a fonte total, avançar o campo por diferenças finitas e aplicar absorção.
+</div>
+
+<div class="step">
+  <span class="label">3</span>
+  <strong>Renderizar</strong> o campo em um canvas com colormap, sobrepondo as partículas.
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="equacao">
+<h2>2. A equação de onda 2D</h2>
+
+<p>A equação de onda escalar homogênea em duas dimensões espaciais é:</p>
+
+<div class="math">
+$$\frac{\partial^2 Z}{\partial t^2} = c^2 \left(\frac{\partial^2 Z}{\partial x^2} + \frac{\partial^2 Z}{\partial y^2}\right)$$
+</div>
+
+<p>Com uma fonte externa \(f(\mathbf{r}, t)\) e um termo de amortecimento \(\sigma(\mathbf{r})\,\partial_t Z\), a equação completa usada no simulador é:</p>
+
+<div class="math">
+$$\frac{\partial^2 Z}{\partial t^2} + \sigma(\mathbf{r})\frac{\partial Z}{\partial t} = c^2 \nabla^2 Z + f(\mathbf{r}, t)$$
+</div>
+
+<p>O termo \(\sigma\) é a <strong>absorção</strong> &mdash; ele amortece a onda em regiões específicas (por exemplo, nas bordas do domínio), evitando reflexões.</p>
+
+<h3>Fontes de partículas</h3>
+
+<p>Cada partícula \(k\) na posição \(\mathbf{r}_k(t)\) contribui com uma gaussiana:</p>
+
+<div class="math">
+$$P(\mathbf{r}, t) = \sum_{k=1}^{N_p} q_k \exp\!\left(-\frac{\|\mathbf{r} - \mathbf{r}_k(t)\|^2 + z_k(t)^2}{w_k^2}\right)$$
+</div>
+
+<p>onde \(q_k\) é a carga, \(w_k\) a largura da gaussiana e \(z_k\) uma coordenada "fora do plano" que permite simular partículas que se aproximam ou afastam do plano \(xy\).</p>
+
+<p>O campo total exibido é:</p>
+
+<div class="math">
+$$Z_{\text{total}}(\mathbf{r}, t) = Z_{\text{rad}}(\mathbf{r}, t) + P(\mathbf{r}, t)$$
+</div>
+
+<p>onde \(Z_{\text{rad}}\) é o campo radiado (a solução da equação de onda) e \(P\) é a contribuição instantânea das partículas.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="discret">
+<h2>3. Discretização: esquema de 9 pontos</h2>
+
+<p>O domínio é discretizado numa grade retangular de \(n_x \times n_y\) pontos com espaçamento \(\Delta x = W/(n_x - 1)\) em ambas as direções (a grade é quadrada em espaço físico, mesmo que \(W \neq H\)).</p>
+
+<h3>3.1 Aproximação do laplaciano</h3>
+
+<p>O laplaciano \(\nabla^2 Z\) é aproximado pelo <strong>esquema de 9 pontos</strong> (stencil de 8 vizinhos + centro):</p>
+
+<div class="math">
+$$\nabla^2 Z_{i,j} \approx \frac{1}{6\Delta x^2}\Bigl[4(Z_{i+1,j} + Z_{i-1,j} + Z_{i,j+1} + Z_{i,j-1}) + (Z_{i+1,j+1} + Z_{i-1,j+1} + Z_{i+1,j-1} + Z_{i-1,j-1}) - 20 Z_{i,j}\Bigr]$$
+</div>
+
+<p>Esse esquema tem erro \(O(\Delta x^2)\), como o de 5 pontos, mas é <strong>isotrópico</strong> &mdash; a velocidade de propagação não depende da direção, o que evita artefatos de grade em ondas circulares.</p>
+
+<h3>3.2 Avanço temporal</h3>
+
+<p>A segunda derivada temporal é aproximada por diferença central de segunda ordem:</p>
+
+<div class="math">
+$$\frac{\partial^2 Z}{\partial t^2} \approx \frac{Z^{n+1} - 2Z^n + Z^{n-1}}{\Delta t^2}$$
+</div>
+
+<p>Substituindo na equação de onda e resolvendo para \(Z^{n+1}\):</p>
+
+<div class="math">
+$$Z^{n+1}_{i,j} = 2Z^n_{i,j} - Z^{n-1}_{i,j} + c^2 \Delta t^2 \, \nabla^2 Z^n_{i,j} + \Delta t^2 \, f^n_{i,j} - \sigma_{i,j}\Delta t\,(Z^n_{i,j} - Z^{n-1}_{i,j})$$
+</div>
+
+<p>É um esquema <strong>explícito</strong> de três níveis temporais: para calcular o passo \(n+1\), precisamos de \(Z^n\) e \(Z^{n-1}\).</p>
+
+<h3>3.3 Condições de contorno</h3>
+
+<p>O código fixa \(Z = 0\) nas bordas da grade (<em>Dirichlet</em>), mas a camada de absorção \(\sigma\) atua antes que a onda chegue às bordas, então na prática as bordas ficam em silêncio.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="cfl">
+<h2>4. Estabilidade e condição CFL</h2>
+
+<p>Esquemas explícitos de diferenças finitas para a equação de onda são estáveis apenas se o passo temporal satisfizer a <strong>condição de Courant&ndash;Friedrichs&ndash;Lewy</strong>:</p>
+
+<div class="math">
+$$\text{CFL} \equiv \frac{c\,\Delta t}{\Delta x} \le \frac{1}{\sqrt{2}} \approx 0.7071$$
+</div>
+
+<p>O fator \(1/\sqrt{2}\) vem da dimensionalidade 2D: a velocidade máxima de propagação numérica é \(c/\sqrt{2}\), então \(\Delta t\) precisa ser menor que \(\Delta x/(c\sqrt{2})\).</p>
+
+<p>O simulador expõe dois parâmetros:</p>
+
+<ul>
+  <li><strong>\(c\)</strong> &mdash; velocidade de onda (padrão 1.0).</li>
+  <li><strong>CFL</strong> &mdash; número de Courant (padrão 0.5).</li>
+</ul>
+
+<p>e calcula:</p>
+
+<div class="math">
+$$\Delta t = \text{CFL} \cdot \frac{\Delta x}{c}$$
+</div>
+
+<div class="warn">
+<strong>Atenção:</strong> CFL acima de ~0.7 pode causar instabilidade (o campo cresce exponencialmente). O limite exato depende do esquema de 9 pontos; o painel avisa quando CFL &gt; 0.7.
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="fonte">
+<h2>5. Fontes: condição inicial e fonte externa</h2>
+
+<h3>5.1 Condição inicial</h3>
+
+<p>O programa oferece três tipos de condição inicial para \(Z_{\text{rad}}\):</p>
+
+<table>
+  <tr><th>Tipo</th><th>Fórmula</th></tr>
+  <tr><td>Zero</td><td>\(Z_{\text{rad}}(\mathbf{r}, 0) = 0\)</td></tr>
+  <tr><td>Gaussiana</td><td>\(Z_{\text{rad}}(\mathbf{r}, 0) = A \exp\!\left(-\dfrac{\|\mathbf{r} - \mathbf{r}_c\|^2}{w^2}\right)\)</td></tr>
+  <tr><td>Expressão</td><td>\(Z_{\text{rad}}(\mathbf{r}, 0) = Z_{\text{expr}}(x, y)\) (avaliada via math.js)</td></tr>
+</table>
+
+<p>As variáveis livres da expressão viram sliders automáticos (mesma técnica do simulador de campo magnético).</p>
+
+<div class="note">
+<strong>Por que começar com \(Z_{\text{rad}}\) e não com \(Z_{\text{total}}\)?</strong> Porque o campo próprio das partículas \(P(\mathbf{r}, 0)\) já é o estado estacionário da equação com fonte. Se começássemos com \(Z_{\text{rad}} = Z_{\text{init}} - P\), o termo \(Z_{\text{rad}} = -P\) se dispersaria como onda livre &mdash; um pulso espúrio de partida. Começando com \(Z_{\text{rad}} = Z_{\text{init}}\), o campo total em \(t=0\) é \(Z_{\text{init}} + P\), que é fisicamente consistente.
+</div>
+
+<h3>5.2 Fonte externa</h3>
+
+<p>Uma expressão \(f(x, y, t)\) pode ser adicionada como fonte no lado direito da equação de onda. O programa avalia a expressão em cada ponto da grade a cada passo:</p>
+
+<div class="math">
+$$f^n_{i,j} = f(x_i, y_j, t_n)$$
+</div>
+
+<p>e o termo \(\Delta t^2 f\) entra diretamente no avanço temporal. Isso permite simular:</p>
+
+<ul>
+  <li>Uma fonte pontual oscilante: <code>sin(2*pi*f*t) * exp(-((x-x0)^2+(y-y0)^2)/w^2)</code>.</li>
+  <li>Uma fonte em linha: <code>sin(2*pi*f*t) * exp(-(x-x0)^2/w^2)</code>.</li>
+  <li>Um pulso em movimento: <code>exp(-((x - v*t)^2 + y^2)/w^2)</code>.</li>
+</ul>
+</section>
+
+<!-- ============================================================ -->
+<section id="absorcao">
+<h2>6. Fronteiras absorventes (camada σ)</h2>
+
+<p>Sem absorção, as ondas que atingem as bordas do domínio refletem de volta, criando artefatos. O simulador implementa uma <strong>camada absorvente</strong> (sponge layer) perto das bordas, onde \(\sigma(\mathbf{r}) > 0\).</p>
+
+<h3>6.1 Perfil de \(\sigma\)</h3>
+
+<p>Para cada tipo de absorção, \(\sigma\) é calculado a partir de uma função de distância normalizada \(s(\mathbf{r}) \in [0, 1]\):</p>
+
+<div class="math">
+$$\sigma(\mathbf{r}) = \sigma_{\max} \cdot s(\mathbf{r})^4$$
+</div>
+
+<p>O expoente 4 garante que a transição da região interna (onde \(s = 0\)) para a camada absorvente seja suave, evitando reflexões na interface.</p>
+
+<h3>6.2 Tipos de absorção</h3>
+
+<table>
+  <tr><th>Tipo</th><th>Definição de \(s(\mathbf{r})\)</th></tr>
+  <tr>
+    <td>Circular</td>
+    <td>\(s = \text{clamp}\!\left(\dfrac{R - R_0}{w}, 0, 1\right)\), \(R = \|\mathbf{r} - \mathbf{r}_c\|\), \(R_0 = R_{\max} - w\)</td>
+  </tr>
+  <tr>
+    <td>Abertura radial</td>
+    <td>Igual à circular, mas \(s = 0\) quando \(|\theta - \theta_0| < \alpha\) (abertura angular)</td>
+  </tr>
+  <tr>
+    <td>Horizontal</td>
+    <td>\(s = \text{clamp}\!\left(\dfrac{|y| - Y_0}{w}, 0, 1\right)\), \(Y_0 = H/2 - 1.125w\)</td>
+  </tr>
+  <tr>
+    <td>Vertical</td>
+    <td>\(s = \text{clamp}\!\left(\dfrac{|x| - X_0}{w}, 0, 1\right)\), \(X_0 = W/2 - 1.125w\)</td>
+  </tr>
+  <tr>
+    <td>Retangular</td>
+    <td>\(s = \max(s_x, s_y)\), com \(s_x, s_y\) definidos como em horizontal/vertical</td>
+  </tr>
+</table>
+
+<p>Os parâmetros ajustáveis são:</p>
+
+<ul>
+  <li><strong>absorb_width</strong> (\(w\)) &mdash; largura da camada absorvente.</li>
+  <li><strong>σ máx</strong> &mdash; intensidade máxima do amortecimento.</li>
+  <li>Para o tipo "abertura radial": <strong>θ₀</strong> (direção da abertura) e <strong>abertura</strong> (largura angular).</li>
+</ul>
+
+<h3>6.3 Aplicação no avanço temporal</h3>
+
+<p>O termo de amortecimento é aplicado na forma discretizada:</p>
+
+<div class="math">
+$$Z^{n+1} = \ldots - \sigma_{i,j}\,\Delta t\,(Z^n_{i,j} - Z^{n-1}_{i,j})$$
+</div>
+
+<p>Isso corresponde a \(\sigma\,\partial_t Z\) aproximado por diferença regressiva de primeira ordem &mdash; suficiente para a absorção.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="particulas">
+<h2>7. Partículas acopladas ao campo</h2>
+
+<p>Cada partícula é uma fonte gaussiana que se move. O programa armazena:</p>
+
+<ul>
+  <li>Posição \(\mathbf{r}_k = (x_k, y_k, z_k)\).</li>
+  <li>Largura \(w_k\) da gaussiana.</li>
+  <li>Massa \(m_k\) e carga \(q_k\).</li>
+  <li>Velocidade vertical \(v_{z,k}\) (usada no modo interativo e na órbita).</li>
+</ul>
+
+<h3>7.1 Cálculo da fonte</h3>
+
+<p>Para cada partícula \(k\), o programa soma sua gaussiana à grade, mas apenas nos pontos dentro de \(3w_k\) do centro (para economizar):</p>
+
+<div class="math">
+$$P_{i,j} \mathrel{+}= q_k \exp\!\left(-\frac{(x_i - x_k)^2 + (y_j - y_k)^2 + z_k^2}{w_k^2}\right)$$
+</div>
+
+<h3>7.2 Distribuição inicial</h3>
+
+<p>As partículas podem ser distribuídas em:</p>
+
+<ul>
+  <li><strong>Anel</strong>: \(N\) pontos em elipse de semi-eixos \(r_x = \ell/2 \cdot p\) e \(r_y = \ell/(2p)\), onde \(\ell\) é o tamanho e \(p\) a proporção.</li>
+  <li><strong>Linha</strong>: \(N\) pontos ao longo de um segmento de comprimento \(\ell\) e ângulo \(\theta\).</li>
+  <li><strong>Centro</strong>: todas na origem (ou em \((x_c, y_c)\)).</li>
+</ul>
+
+<p>O checkbox <strong>"Cargas alternadas (+/−)"</strong> faz com que partículas pares tenham carga \(+q\) e ímpares \(-q\), criando um dipolo efetivo ao longo do anel.</p>
+
+<h3>7.3 Rampa de ativação</h3>
+
+<p>Para evitar um transiente brusco no primeiro passo, o acoplamento partícula-campo é rampeado:</p>
+
+<div class="math">
+$$\text{ramp}(n) = \min\!\left(1, \frac{n}{5}\right)$$
+</div>
+
+<p>e o termo de fonte efetivo é \(\text{ramp}(n) \cdot \Delta^2 P\). Isso distribui a "ligação" da fonte ao longo dos primeiros 5 passos.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="movimento">
+<h2>8. Movimento das partículas</h2>
+
+<p>As partículas podem ser estacionárias, seguir um movimento prescrito ou interagir com o campo. Os presets são:</p>
+
+<table>
+  <tr><th>Preset</th><th>Movimento</th></tr>
+  <tr><td>Estacionário</td><td>\(x_k, y_k, z_k\) constantes.</td></tr>
+  <tr><td>Onda em z</td><td>\(z_k(t) = A_z \cos(2\pi f_z t - \phi_k)\) (com \(\phi_k = 0\)).</td></tr>
+  <tr><td>Onda em x</td><td>\(x_k(t) = A_x \cos(2\pi f_x t - \phi_k)\), com \(\phi_k = 2\pi \cdot \text{spread} \cdot k/N\).</td></tr>
+  <tr><td>Oscilação em x</td><td>\(x_k(t) = A_x \cos(2\pi f_x t)\) (todas em fase).</td></tr>
+  <tr><td>Círculo</td><td>\(x_k = A_x \cos(2\pi f_x t - \phi_k)\), \(y_k = A_y \sin(2\pi f_y t - \phi_k)\), com \(\phi_k = 2\pi k/N\).</td></tr>
+  <tr><td>Linear</td><td>\(x_k(t) = x_k(0) + v_x \max(0, t - \tau_k)\), com \(\tau_k = k \cdot \text{delay} \cdot \Delta t\).</td></tr>
+  <tr><td>Aceleração</td><td>\(x_k(t) = x_k(0) + \tfrac{1}{2} a_x (t - \tau_k)^2\) para \(t > \tau_k\).</td></tr>
+  <tr><td>Interação de campo</td><td>\(m\ddot{z}_k = \text{coupling} \cdot q_k \cdot Z_{\text{rad}}(\mathbf{r}_k)\) (Euler semi-implícito em \(v_z\)).</td></tr>
+  <tr><td>Órbita</td><td>\(x_k\) linear; \(z_k\) segue a interação de campo.</td></tr>
+  <tr><td>Personalizado</td><td>Expressões \(x(t), y(t), z(t)\) com variáveis \(t, i, n\) e parâmetros livres.</td></tr>
+</table>
+
+<h3>8.1 Modos de movimento personalizado</h3>
+
+<p>O modo personalizado permite duas interpretações:</p>
+
+<ul>
+  <li><strong>Deslocamento</strong>: as expressões retornam <em>velocidades</em>, que são integradas: \(\Delta x = v_x(t)\,\Delta t\).</li>
+  <li><strong>Posição</strong>: as expressões retornam <em>posições</em> diretamente: \(x_k = x(t, i, n)\).</li>
+</ul>
+
+<h3>8.2 Limitação de velocidade</h3>
+
+<p>Se "Impedir velocidade &gt; c" estiver ligado, o deslocamento é limitado a:</p>
+
+<div class="math">
+$$\|\Delta\mathbf{r}\| \le 0.99\,c\,\Delta t$$
+</div>
+
+<p>Isso evita que partículas se movam mais rápido que a onda &mdash; o que causaria choques numéricos (a fonte "ultrapassa" a própria perturbação).</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="interativo">
+<h2>9. Modo interativo</h2>
+
+<p>Quando o modo interativo está ativo:</p>
+
+<ul>
+  <li><strong>Arrastar</strong>: clique numa partícula e arraste para movê-la. A posição é atualizada em tempo real.</li>
+  <li><strong>Criar</strong>: clique em "➕ Criar partícula" e depois no canvas para criar uma nova partícula na posição clicada.</li>
+  <li><strong>Remover</strong>: clique em "➖ Remover" e depois numa partícula para removê-la.</li>
+</ul>
+
+<h3>9.1 Reconciliação de campo</h3>
+
+<p>Quando uma partícula é movida ou removida em pausa, o campo \(Z_{\text{rad}}\) precisa ser corrigido para que \(Z_{\text{total}}\) permaneça contínuo:</p>
+
+<div class="math">
+$$Z_{\text{rad}}^{\text{novo}} = Z_{\text{rad}}^{\text{antigo}} + (P^{\text{antigo}} - P^{\text{novo}})$$
+</div>
+
+<p>Isso garante que a soma \(Z_{\text{rad}} + P\) não salte &mdash; a partícula "teleporta" sem emitir um pulso espúrio. A correção é aplicada a \(Z_{\text{curr}}\) e \(Z_{\text{prev}}\), e o histórico de partículas é atualizado.</p>
+
+<div class="note">
+<strong>Em execução</strong>, a correção não é aplicada: o movimento natural da partícula gera o pulso fisicamente correto (a diferença de segunda ordem \(P^n - 2P^{n-1} + P^{n-2}\) aparece no avanço temporal).
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="render">
+<h2>10. Renderização e colormaps</h2>
+
+<p>O campo é renderizado num canvas de \(n_x \times n_y\) pixels, com o eixo \(y\) invertido (linha 0 do canvas corresponde ao topo, que é \(y = y_{\max}\)).</p>
+
+<h3>10.1 Normalização</h3>
+
+<p>O usuário pode escolher:</p>
+
+<ul>
+  <li><strong>Auto</strong>: \(v_{\min} = \min(Z) \cdot f\), \(v_{\max} = \max(Z) \cdot f\), onde \(f\) é o "fator de cor" (padrão 1.125).</li>
+  <li><strong>Manual</strong>: \(v_{\min}\) e \(v_{\max}\) fixos pelos sliders.</li>
+</ul>
+
+<p>A cor de cada pixel é:</p>
+
+<div class="math">
+$$t = \text{clamp}\!\left(\frac{Z - v_{\min}}{v_{\max} - v_{\min}}, 0, 1\right)$$
+</div>
+
+<p>e o colormap mapeia \(t \in [0,1]\) para RGB.</p>
+
+<h3>10.2 Colormaps disponíveis</h3>
+
+<p>O programa implementa 8 colormaps:</p>
+
+<table>
+  <tr><th>Colormap</th><th>Uso típico</th></tr>
+  <tr><td>RdBu_r</td><td>Divergente (azul = negativo, vermelho = positivo)</td></tr>
+  <tr><td>Coolwarm</td><td>Divergente suave</td></tr>
+  <tr><td>Seismic</td><td>Divergente com saturação</td></tr>
+  <tr><td>Viridis, Inferno, Plasma, Magma, Cividis</td><td>Sequenciais (úteis para \(|Z|\))</td></tr>
+</table>
+
+<h3>10.3 Sobreposições</h3>
+
+<p>Sobre o campo, o programa desenha:</p>
+
+<ul>
+  <li><strong>Partículas</strong>: círculos com cor dependente do sinal da carga (vermelho para \(+\), ciano para \(-\)).</li>
+  <li><strong>Eixos</strong>: linhas em \(x = x_c\) e \(y = y_c\).</li>
+  <li><strong>Grade</strong>: linhas a cada ~10% do domínio.</li>
+</ul>
+</section>
+
+<!-- ============================================================ -->
+<section id="arq">
+<h2>11. Arquitetura e fluxo do programa</h2>
+
+<p>O simulador é uma página HTML com JavaScript inline. O fluxo de uma simulação é:</p>
+
+<div class="step">
+  <span class="label">1</span>
+  <strong>Compilar expressões</strong> (condição inicial, fonte externa, movimento personalizado) via math.js. As compilações são cacheadas por string (até 80 entradas).
+</div>
+
+<div class="step">
+  <span class="label">2</span>
+  <strong>Inicializar a grade</strong>: alocar \(Z_{\text{prev}}, Z_{\text{curr}}, Z_{\text{next}}\) como <code>Float32Array</code>, calcular \(\sigma\), distribuir partículas e rodar dois passos de movimento "antes do t=0" para que o histórico \(P^{n-2}, P^{n-1}, P^n\) seja consistente.
+</div>
+
+<div class="step">
+  <span class="label">3</span>
+  <strong>A cada passo</strong>: atualizar posições, calcular \(P^n\), avançar \(Z\) com o esquema de 9 pontos, aplicar absorção, rotacionar os buffers \(Z_{\text{prev}} \leftarrow Z_{\text{curr}} \leftarrow Z_{\text{next}}\).
+</div>
+
+<div class="step">
+  <span class="label">4</span>
+  <strong>Renderizar</strong> a cada frame (via <code>requestAnimationFrame</code>), com opção de múltiplos passos de física por frame.
+</div>
+
+<h3>Estruturas de dados</h3>
+
+<ul>
+  <li><code>state</code>: opções persistentes (parâmetros do domínio, da onda, das partículas).</li>
+  <li><code>sim</code>: estado da simulação em andamento (buffers, partículas, tempo).</li>
+  <li><code>motionState</code>: parâmetros dos presets de movimento.</li>
+  <li><code>compiled</code>: expressões compiladas (init, force, motion).</li>
+</ul>
+
+<h3>Alocação de memória</h3>
+
+<p>Os buffers \(Z\) são <code>Float32Array</code> de tamanho \(n_x n_y\). Para \(n_x = n_y = 512\), isso é ~1 MB por buffer, 3 MB no total. A cada passo, os buffers são <strong>rotacionados</strong> (não recopiados), o que evita alocação em tempo de execução.</p>
+
+<h3>Loop de animação</h3>
+
+<p>O loop usa <code>requestAnimationFrame</code> com:</p>
+
+<ul>
+  <li><strong>Passos de física por frame</strong>: permite rodar mais rápido que o tempo real (útil para ver ondas lentas).</li>
+  <li><strong>FPS</strong>: calculado a cada 500 ms e exibido no HUD.</li>
+</ul>
+
+<h3>Estados de UI</h3>
+
+<p>A UI tem três estados:</p>
+
+<table>
+  <tr><th>Estado</th><th>Painel de setup</th><th>Botões</th></tr>
+  <tr><td>Configuração</td><td>Editável</td><td>Iniciar habilitado; Pausar/Encerrar desabilitados</td></tr>
+  <tr><td>Executando</td><td>Bloqueado</td><td>Pausar/Encerrar habilitados</td></tr>
+  <tr><td>Pausado</td><td>Bloqueado</td><td>Retomar/Encerrar habilitados</td></tr>
+</table>
+
+<p>Isso evita que o usuário mude parâmetros no meio da simulação (o que exigiria reinicialização parcial).</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="limites">
+<h2>12. Limitações e escolhas numéricas</h2>
+
+<h3>12.1 Erro de discretização</h3>
+<p>O esquema de 9 pontos tem erro \(O(\Delta x^2)\) em espaço e \(O(\Delta t^2)\) em tempo. Para \(n_x = 300\), o erro relativo típico é \(10^{-3}\). Aumentar a resolução melhora a precisão, com custo linear em \(n_x n_y\) por passo.</p>
+
+<h3>12.2 Estabilidade CFL</h3>
+<p>A condição CFL \(\le 0.707\) é necessária mas não suficiente em todos os casos; o esquema de 9 pontos pode ser instável para CFL próximo do limite. Na prática, CFL \(\le 0.5\) é seguro.</p>
+
+<h3>12.3 Absorção</h3>
+<p>A camada absorvente não é perfeitamente transparente: ondas com comprimento de onda comparável à largura da camada são parcialmente refletidas. Aumentar <code>absorb_width</code> melhora a absorção, mas reduz a região útil do domínio.</p>
+
+<h3>12.4 Bordas</h3>
+<p>As bordas da grade têm \(Z = 0\) (Dirichlet). Se a absorção não for suficiente, a onda reflete nas bordas &mdash; um artefato visível como ondas que "voltam".</p>
+
+<h3>12.5 Partículas</h3>
+<p>A fonte gaussiana tem largura \(w\). Para \(w\) comparável a \(\Delta x\), a gaussiana é mal resolvida; para \(w\) muito maior que o domínio, a fonte vira essencialmente uniforme. O padrão (\(w = 0.02\) com \(W = 1\)) corresponde a ~20 pontos de largura, o que é razoável.</p>
+
+<h3>12.6 Física simplificada</h3>
+<ul>
+  <li>Equação de onda escalar: sem polarização, sem componentes vetoriais.</li>
+  <li>Sem dispersão física: \(c\) é constante para todos os comprimentos de onda (a não ser pela dispersão numérica do esquema).</li>
+  <li>Sem não-linearidades.</li>
+  <li>Partículas são fontes prescritas, não cargas físicas que sentem força de Lorentz completa.</li>
+</ul>
+
+<div class="note">
+Dentro dessas aproximações, o simulador resolve a equação de onda escalar 2D com precisão de segunda ordem em espaço e tempo. É uma ferramenta didática para visualizar propagação, reflexão, difração e interferência de ondas.
+</div>
+</section>
+
+<footer>
+  Simulador de equação da onda &mdash; documentação técnica.<br>
+  Autor do simulador: Marcelo Prado Cionek.
+</footer>
+
+</div>
+</body>
+</html>
